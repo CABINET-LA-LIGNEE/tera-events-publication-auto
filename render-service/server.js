@@ -285,6 +285,28 @@ app.post("/render/:template", async (req, res) => {
     await page.setContent(html, { waitUntil: "networkidle" });
     await page.evaluate(async () => {
       await document.fonts.ready;
+
+      // Les fonds générés par OpenAI arrivent sous forme de longues data URLs. Chromium peut
+      // considérer la page comme inactive côté réseau alors que leur décodage et leur première
+      // peinture ne sont pas encore terminés. Sans cette attente, la capture peut contenir de
+      // grands aplats gris. On force donc le décodage du fond de la toile, puis deux frames de
+      // rendu, avant de prendre la capture.
+      const canvas = document.querySelector(".canvas");
+      const backgroundImage = canvas ? getComputedStyle(canvas).backgroundImage : "";
+      const match = backgroundImage.match(/^url\(["']?(.*?)["']?\)$/s);
+      if (match?.[1]) {
+        const background = new Image();
+        background.src = match[1];
+        try {
+          await background.decode();
+        } catch {
+          await new Promise((resolve, reject) => {
+            background.onload = resolve;
+            background.onerror = reject;
+          });
+        }
+      }
+
       for (const el of document.querySelectorAll("[data-fit-text]")) {
         const maxWidth = Number(el.dataset.maxWidth || 0);
         const maxHeight = Number(el.dataset.maxHeight || 0);
@@ -298,6 +320,8 @@ app.post("/render/:template", async (req, res) => {
           el.style.fontSize = `${size}px`;
         }
       }
+
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     });
     const buffer = await page.screenshot({ type: "png" });
     await page.close();
