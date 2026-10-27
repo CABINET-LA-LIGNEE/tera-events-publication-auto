@@ -69,23 +69,20 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "https://api.anthropic.com/v1/messages",
+        "url": "https://api.openai.com/v1/responses",
         "authentication": "predefinedCredentialType",
-        "nodeCredentialType": "anthropicApi",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "anthropic-version",
-              "value": "2023-06-01"
-            }
-          ]
-        },
+        "nodeCredentialType": "openAiApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.anthropic_request) }}",
+        "jsonBody": "={{ JSON.stringify({model:\"gpt-6.1-sol\",instructions:$json.anthropic_request.system,input:($json.anthropic_request.messages||[]).map(m=>({role:m.role,content:m.content})),max_output_tokens:6500,store:false}) }}",
         "options": {
-          "timeout": 600000
+          "timeout": 270000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          }
         }
       }
     },
@@ -98,7 +95,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "// n8n node mode: runOnceForEachItem (this file must return a single {json:{...}} object, not an array)\n// Reprend telle quelle la double sécurité anti-crash de La Lignée : le nœud ne doit jamais\n// planter même si Claude répond avec du texte non conforme (préambule, balises markdown).\nconst contentBlocks = $json.content || [];\nconst textBlocks = contentBlocks.filter(b => b.type === \"text\");\nconst raw = textBlocks.length ? textBlocks.map(b => b.text).join(\"\") : undefined;\n\nfunction tryParse(text) {\n  if (!text) return undefined;\n  try {\n    return JSON.parse(text);\n  } catch (e) {\n    return undefined;\n  }\n}\n\nlet parsed = tryParse(raw);\nif (parsed === undefined) {\n  const match = raw && raw.match(/\\{[\\s\\S]*\\}/);\n  parsed = match ? tryParse(match[0]) : undefined;\n}\nif (parsed === undefined) {\n  parsed = { error: \"Parsing JSON échoué\", raw: raw || JSON.stringify($json) };\n}\n\n// Garde-fou éditorial : aucun membre de l'équipe ne doit être nommé dans un contenu publié.\n// Cette vérification complète la consigne donnée au modèle et bloque le flux si elle est violée.\nconst publicationText = JSON.stringify(parsed);\nconst forbiddenPeople = [\"Vanessa\", \"Eric\", \"Éric\"];\nconst detectedPerson = forbiddenPeople.find(name =>\n  new RegExp(`\\\\b${name}\\\\b`, \"iu\").test(publicationText)\n);\nif (detectedPerson) {\n  throw new Error(\"Le contenu généré cite un membre de l'équipe. Une nouvelle rédaction non nominative est requise.\");\n}\n\nif (/centre commercial tera/iu.test(publicationText)) {\n  throw new Error(\"Le contenu généré utilise Centre Commercial TERA comme une marque. La publication doit parler de TERA EVENTS.\");\n}\n\n// Rend les légendes agréables à lire même lorsque le modèle oublie les sauts de paragraphe.\nif (typeof parsed.caption === \"string\") {\n  parsed.caption = parsed.caption.trim();\n  if (!/\\n\\s*\\n/u.test(parsed.caption)) {\n    const sentences = parsed.caption.match(/[^.!?]+[.!?]+|[^.!?]+$/gu)?.map(s => s.trim()).filter(Boolean) || [];\n    if (sentences.length >= 2) {\n      const splitAt = Math.ceil(sentences.length / 2);\n      parsed.caption = [sentences.slice(0, splitAt).join(\" \"), sentences.slice(splitAt).join(\" \")]\n        .filter(Boolean)\n        .join(\"\\n\\n\");\n    }\n  }\n\n  const contactBlock = \"WhatsApp ou appel : +225 05 66 22 10 10\\nE-mail : reservations@tera.events\";\n  const locationBlock = \"Localisation : � l'int�rieur du Centre Commercial TERA, 7e Tranche, Deux-Plateaux.\\nVisites uniquement sur rendez-vous.\";\n  if (!parsed.caption.includes(\"+225 05 66 22 10 10\")) {\n    parsed.caption = `${parsed.caption}\\n\\n${contactBlock}`;\n  }\n  const locationBlockCanonical = \"Localisation : \\u00e0 l'int\\u00e9rieur du Centre Commercial TERA, 7e Tranche, Deux-Plateaux.\\nVisites uniquement sur rendez-vous.\";\n  if (!parsed.caption.includes(\"Centre Commercial TERA\") || !/visites? uniquement sur rendez-vous/i.test(parsed.caption)) {\n    parsed.caption = `${parsed.caption}\\n\\n${locationBlockCanonical}`;\n  }\n}\n\nif (Array.isArray(parsed.hashtags)) {\n  parsed.hashtags = parsed.hashtags\n    .map(tag => `#${String(tag).trim().replace(/^#+/u, \"\").replace(/\\s+/gu, \"\")}`)\n    .filter(tag => tag.length > 1);\n}\n\nconst source = $(\"Préparer le Prompt Claude\").item.json;\n\nreturn {\n  json: {\n    jour: source.jour,\n    famille: source.famille,\n    variante: source.variante,\n    attempt: source.attempt || 1,\n    target_due_at: source.target_due_at,\n    ...parsed\n  }\n};\n",
+        "jsCode": "// n8n node mode: runOnceForEachItem.\n// Le nom du nœud conserve la mention historique Claude, mais la réponse vient de l'API OpenAI.\nconst source = $(\"Préparer le Prompt Claude\").item.json;\nconst output = Array.isArray($json.output) ? $json.output : [];\nconst raw = $json.output_text || output\n  .flatMap(item => Array.isArray(item.content) ? item.content : [])\n  .filter(content => content.type === \"output_text\" && typeof content.text === \"string\")\n  .map(content => content.text)\n  .join(\"\");\n\nfunction tryParse(text) {\n  if (!text) return undefined;\n  try {\n    return JSON.parse(text);\n  } catch {\n    return undefined;\n  }\n}\n\nlet parsed = tryParse(raw);\nif (parsed === undefined) {\n  const match = raw && raw.match(/\\{[\\s\\S]*\\}/);\n  parsed = match ? tryParse(match[0]) : undefined;\n}\nif (parsed === undefined) parsed = { error: \"Parsing JSON échoué\", raw: raw || \"Réponse OpenAI vide\" };\n\nconst publicationText = JSON.stringify(parsed);\nfor (const name of [\"Vanessa\", \"Eric\", \"Éric\"]) {\n  if (new RegExp(`\\\\b${name}\\\\b`, \"iu\").test(publicationText)) {\n    throw new Error(\"Le contenu généré cite un membre de l'équipe.\");\n  }\n}\n\nif (\n  /centre commercial tera/iu.test(publicationText) &&\n  !/localisation|situ[eé]e?|int[eé]rieur/iu.test(publicationText)\n) {\n  throw new Error(\"Centre Commercial TERA ne doit être cité que comme localisation.\");\n}\n\nif (typeof parsed.caption === \"string\") {\n  parsed.caption = parsed.caption.trim();\n  if (!/\\n\\s*\\n/u.test(parsed.caption)) {\n    const sentences = parsed.caption\n      .match(/[^.!?]+[.!?]+|[^.!?]+$/gu)\n      ?.map(sentence => sentence.trim())\n      .filter(Boolean) || [];\n    if (sentences.length >= 2) {\n      const middle = Math.ceil(sentences.length / 2);\n      parsed.caption = [\n        sentences.slice(0, middle).join(\" \"),\n        sentences.slice(middle).join(\" \")\n      ].filter(Boolean).join(\"\\n\\n\");\n    }\n  }\n\n  const contact = \"WhatsApp ou appel : +225 05 66 22 10 10\\nE-mail : reservations@tera.events\";\n  const location = \"Localisation : à l'intérieur du Centre Commercial TERA, 7e Tranche, Deux-Plateaux.\\nVisites uniquement sur rendez-vous.\";\n  if (!parsed.caption.includes(\"+225 05 66 22 10 10\")) parsed.caption += `\\n\\n${contact}`;\n  if (!parsed.caption.includes(\"Centre Commercial TERA\") || !/visites? uniquement sur rendez-vous/i.test(parsed.caption)) {\n    parsed.caption += `\\n\\n${location}`;\n  }\n}\n\nif (Array.isArray(parsed.hashtags)) {\n  parsed.hashtags = parsed.hashtags\n    .map(tag => `#${String(tag).trim().replace(/^#+/u, \"\").replace(/\\s+/gu, \"\")}`)\n    .filter(tag => tag.length > 1);\n}\n\nreturn {\n  json: {\n    jour: source.jour,\n    famille: source.famille,\n    variante: source.variante,\n    attempt: source.attempt || 1,\n    target_due_at: source.target_due_at,\n    ...parsed\n  }\n};\n",
         "mode": "runOnceForEachItem"
       }
     },
@@ -125,14 +122,20 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "url": "https://api.openai.com/v1/images/generations",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.gemini_request) }}",
+        "jsonBody": "={{ JSON.stringify({model:\"gpt-image-2.5-flare\",prompt:$json.gemini_request.contents[0].parts[0].text,n:1,size:\"1024x1024\",quality:\"medium\",output_format:\"jpeg\"}) }}",
         "options": {
-          "timeout": 600000
+          "timeout": 270000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          }
         }
       },
       "retryOnFail": true,
@@ -148,7 +151,7 @@
         0
       ],
       "parameters": {
-        "jsCode": "// Réassocie la réponse image au contenu éditorial avant le rendu Figma.\nconst source = $(\"Parser Réponse Claude\").item.json;\n\n// Le Chiffre du mercredi est un carrousel 100 % graphique. Même si une réponse image existe en\n// amont, elle ne doit jamais être transmise aux cinq gabarits de cette série.\nif (source.famille === \"savoirfaire\" && source.variante === \"chiffre\") {\n  const { background_image, background_images, ...withoutBackground } = source;\n  return { json: withoutBackground };\n}\n\nconst parts = $json.candidates?.[0]?.content?.parts || [];\nconst imagePart = parts.find(part => part.inlineData?.data || part.inline_data?.data);\nconst inline = imagePart?.inlineData || imagePart?.inline_data;\n\nif (!inline?.data) {\n  throw new Error(\"La génération de la photo de fond n'a retourné aucune image exploitable.\");\n}\n\nreturn {\n  json: {\n    ...source,\n    background_image: `data:${inline.mimeType || inline.mime_type || \"image/png\"};base64,${inline.data}`\n  }\n};\n",
+        "jsCode": "// Réassocie la réponse image au contenu éditorial avant le rendu Figma.\nconst source = $(\"Parser Réponse Claude\").item.json;\n\n// Le Chiffre du mercredi est un carrousel 100 % graphique. Même si une réponse image existe en\n// amont, elle ne doit jamais être transmise aux cinq gabarits de cette série.\nif (source.famille === \"savoirfaire\" && source.variante === \"chiffre\") {\n  const { background_image, background_images, ...withoutBackground } = source;\n  return { json: withoutBackground };\n}\n\nconst imageData = $json.data?.[0]?.b64_json;\nif (!imageData) {\n  throw new Error(\"OpenAI n'a retourné aucune image exploitable.\");\n}\n\nreturn {\n  json: {\n    ...source,\n    background_image: `data:image/jpeg;base64,${imageData}`\n  }\n};\n",
         "mode": "runOnceForEachItem"
       }
     },

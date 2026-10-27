@@ -7,11 +7,11 @@ Documentation du projet, en cours de construction. Projet indépendant de `la-li
 TERA EVENTS publie 3 fois par semaine (lundi, mercredi, vendredi) sur Facebook, Instagram et LinkedIn, chaque créneau ayant un angle fixe. Le week-end reste au geste spontané de l'agence (réalisations, reels), hors de ce pipeline.
 
 **Composants prévus :**
-- **n8n** — même instance que La Lignée, workflow indépendant `TERA EVENTS - Publication Hebdomadaire` (`wrq6FhVvULDUuUUp`), créé avec 25 nœuds et maintenu désactivé pendant la configuration.
-- **Claude (Anthropic API)** — rédaction dynamique des textes selon le sujet, sans recherche web (le contenu porte sur les services propres de TERA, pas des statistiques externes).
-- **Gemini Image** — génération des photos de fond contextuelles pour les gabarits photographiques. Aucun texte, logo ni élément de composition n'est généré dans l'image ; la charte reste appliquée par Figma et le render-service.
+- **n8n** — même instance que La Lignée, workflow indépendant `TERA EVENTS - Publication Hebdomadaire` (`wrq6FhVvULDUuUUp`), actif avec un déclenchement le dimanche à 07 h (Africa/Abidjan).
+- **OpenAI Responses API** — rédaction dynamique des textes selon le sujet, sans recherche web, via le credential n8n isolé `OpenAI - TERA EVENTS`.
+- **OpenAI Image API** — génération des photos de fond contextuelles pour les gabarits photographiques. Aucun texte, logo ni élément de composition n'est généré dans l'image ; la charte reste appliquée par Figma et le render-service.
 - **`render-service`** — service Node.js/Playwright déployé dans le conteneur Docker séparé `tera-render`. n8n le joint sur `http://tera-render:3000` et les images destinées aux réseaux sont servies par `https://tera-visuels.srv1896382.hstgr.cloud`.
-- **Buffer** — module de préparation présent, mais connexion et identifiants de canaux encore manquants.
+- **Buffer** — programmation des publications validées sur les trois canaux TERA : Facebook, Instagram et LinkedIn.
 
 ## 2. Les 3 créneaux et leurs familles de gabarits
 
@@ -28,16 +28,16 @@ Les pools de variantes ne contiennent que ce qui est réellement dessiné dans F
 ## 3. Fichiers du dépôt
 
 - `code_prepare_pilliers.js` — détermine jour/famille/variante + rotation hebdomadaire.
-- `code_prompt_prep.js` — construit le prompt Claude : charte éditoriale + schéma JSON exact par famille/variante. Contient les deux règles absolues du cabinet (écriture indétectable comme IA, orthographe irréprochable) et les faits TERA vérifiés (seule source autorisée pour tout chiffre/prix cité).
-- `code_parse_response.js` — parsing anti-crash de la réponse Claude (repris tel quel du pattern La Lignée).
-- `code_prepare_visuals.js` — transforme le JSON de Claude en appels au render-service, un par slide, en injectant les éléments de marque fixes (tags, coordonnées, CTA statiques) que Claude ne génère jamais.
+- `code_prompt_prep.js` — construit le prompt éditorial : charte + schéma JSON exact par famille/variante. Contient les deux règles absolues du cabinet (écriture indétectable comme IA, orthographe irréprochable) et les faits TERA vérifiés.
+- `code_parse_openai_response.js` — parsing anti-crash de la réponse OpenAI et contrôles éditoriaux bloquants.
+- `code_prepare_visuals.js` — transforme le JSON éditorial en appels au render-service, un par slide, en injectant les éléments de marque fixes que le modèle ne génère jamais.
 - `code_prepare_pack.js` — regroupe les trois publications dans un formulaire de validation hebdomadaire.
 - `code_traiter_validation.js` — répartit les décisions Valider, Modifier et Refuser.
 - `code_prepare_regeneration.js` — prépare une nouvelle tentative à partir du commentaire de validation, avec trois tentatives maximum.
 - `code_prepare_buffer.js` — prépare une programmation pour Facebook, Instagram et LinkedIn à partir des canaux définis dans l'environnement n8n.
 - `render-service/` — service de rendu, voir §4.
 
-L'export `workflow-tera-events.json` assemble l'appel Anthropic, la branche facultative de photo IA, le rendu, le formulaire de validation, les branches de décision, la boucle de régénération et l'appel Buffer. Il est généré par `build_n8n_workflow.js` et reste désactivé jusqu'à la configuration des credentials et aux essais de bout en bout.
+L'export `workflow-tera-events.json` assemble les appels OpenAI pour la rédaction et les photos, le rendu, le formulaire de validation, les branches de décision, la boucle de régénération et l'appel Buffer. Il est généré par `build_n8n_workflow.js`. Les credentials sont associés dans n8n et ne sont jamais enregistrés dans le dépôt.
 
 ## 4. render-service
 
