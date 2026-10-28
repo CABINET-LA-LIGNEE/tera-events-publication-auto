@@ -81,8 +81,10 @@ function renderNode(n, data) {
     const underline = n.underline ? "text-decoration:underline;" : "";
     const balance = n.balance ? "text-wrap:balance;" : "";
     const position = n.x !== undefined ? `position:absolute; left:${n.x}px; top:${n.y}px;` : "";
-    const fit = n.fit
-      ? `data-fit-text="1" data-max-width="${n.fit.maxWidth || n.w || 0}" data-max-height="${n.fit.maxHeight || 0}" data-min-size="${Math.max(n.fit.minSize || 12, mobileMinSize)}"`
+    const shouldAutoFit = n.fit || (!n.nowrap && n.static === undefined && n.data);
+    const minReadableSize = isReadableBody ? 30 : Math.min(n.size, 34);
+    const fit = shouldAutoFit
+      ? `data-fit-text="1" data-field="${escapeHtml(n.data || "texte")}" data-max-width="${n.fit?.maxWidth || n.w || 0}" data-max-height="${n.fit?.maxHeight || 0}" data-max-lines="${n.fit?.maxLines || 3}" data-min-size="${Math.max(n.fit?.minSize || minReadableSize, mobileMinSize)}"`
       : "";
     return `<div ${fit} style="${position} font-family:'${n.font}', sans-serif; font-weight:${n.weight}; font-size:${renderedSize}px; line-height:${n.lineHeight || 1.2}; font-style:${n.italic ? "italic" : "normal"}; color:${n.color}; text-align:${textAlign}; text-transform:${n.uppercase ? "uppercase" : "none"}; white-space:${whiteSpace}; word-wrap:break-word; ${w} ${rotate} ${shadow} ${underline} ${balance} ${flex}">${escapeHtml(text)}</div>`;
   }
@@ -94,14 +96,14 @@ function renderNode(n, data) {
     const normal = resolveText({ data: n.dataNormal }, data);
     const accent = resolveText({ data: n.dataAccent }, data);
     if (!normal && !accent) return "";
-    return `<div style="font-family:'${n.font}', serif; font-weight:${n.weight}; font-size:${n.size}px; line-height:${n.lineHeight || 1.15}; color:${n.color}; width:100%; flex-shrink:0;">${escapeHtml(normal)} <span style="font-style:italic; font-weight:${n.accentWeight || n.weight}; color:${n.accentColor};">${escapeHtml(accent)}</span></div>`;
+    return `<div data-fit-text="1" data-field="titre" data-max-lines="3" data-min-size="34" style="font-family:'${n.font}', serif; font-weight:${n.weight}; font-size:${n.size}px; line-height:${n.lineHeight || 1.15}; color:${n.color}; width:100%; flex-shrink:0;">${escapeHtml(normal)} <span style="font-style:italic; font-weight:${n.accentWeight || n.weight}; color:${n.accentColor};">${escapeHtml(accent)}</span></div>`;
   }
 
   if (n.type === "quoteTwoTone") {
     const accent = resolveText({ data: n.dataAccent }, data);
     const main = resolveText({ data: n.dataMain }, data);
     if (!accent && !main) return "";
-    return `<div style="font-family:'${n.font}', serif; font-size:${n.size}px; line-height:${n.lineHeight}; width:${n.w}px; color:${n.color}; text-align:center; flex-shrink:0;"><span style="font-weight:700; font-style:normal; color:${n.accentColor};">${escapeHtml(accent)}</span><span style="font-weight:500; font-style:italic;">${accent && main ? " " : ""}${escapeHtml(main)}</span></div>`;
+    return `<div data-fit-text="1" data-field="citation" data-max-width="${n.w}" data-max-lines="3" data-min-size="34" style="font-family:'${n.font}', serif; font-size:${n.size}px; line-height:${n.lineHeight}; width:${n.w}px; color:${n.color}; text-align:center; flex-shrink:0;"><span style="font-weight:700; font-style:normal; color:${n.accentColor};">${escapeHtml(accent)}</span><span style="font-weight:500; font-style:italic;">${accent && main ? " " : ""}${escapeHtml(main)}</span></div>`;
   }
 
   if (n.type === "image") {
@@ -310,14 +312,22 @@ app.post("/render/:template", async (req, res) => {
       for (const el of document.querySelectorAll("[data-fit-text]")) {
         const maxWidth = Number(el.dataset.maxWidth || 0);
         const maxHeight = Number(el.dataset.maxHeight || 0);
+        const maxLines = Number(el.dataset.maxLines || 0);
         const minSize = Number(el.dataset.minSize || 12);
         let size = Number.parseFloat(getComputedStyle(el).fontSize);
-        const overflows = () =>
-          (maxWidth > 0 && el.scrollWidth > maxWidth + 1) ||
-          (maxHeight > 0 && el.scrollHeight > maxHeight + 1);
+        const overflows = () => {
+          const lineHeight = Number.parseFloat(getComputedStyle(el).lineHeight) || size * 1.2;
+          const lineCount = Math.ceil(el.scrollHeight / lineHeight);
+          return (maxWidth > 0 && el.scrollWidth > maxWidth + 1) ||
+            (maxHeight > 0 && el.scrollHeight > maxHeight + 1) ||
+            (maxLines > 0 && lineCount > maxLines);
+        };
         while (size > minSize && overflows()) {
           size -= 1;
           el.style.fontSize = `${size}px`;
+        }
+        if (overflows()) {
+          throw new Error(`Le champ ${el.dataset.field || "texte"} dépasse encore ${maxLines || 3} lignes à la taille minimale lisible.`);
         }
       }
 

@@ -44,9 +44,8 @@ RÈGLE ABSOLUE N°1 — ÉCRITURE HUMAINE, AUCUNE TRACE D'IA :
 - Varie réellement la longueur et la construction des phrases. Une phrase courte peut suivre une
   phrase longue. Une idée n'a pas besoin d'être immédiatement rééquilibrée par une proposition
   symétrique.
-- Avant de répondre, relis-toi mentalement : si une phrase pourrait sortir de n'importe quelle
-  agence événementielle dans n'importe quel pays, réécris-la ou supprime-la. Le texte doit sentir
-  Abidjan, TERA, et une personne précise qui l'a écrit.
+- Avant de répondre, relis-toi mentalement : le texte doit sonner comme celui d'une personne qui
+  connaît les services TERA EVENTS. Évite les phrases génériques et les automatismes publicitaires.
 
 RÈGLE ABSOLUE N°2 — ORTHOGRAPHE ET GRAMMAIRE IRRÉPROCHABLES :
 - Français impeccable : accords en genre et en nombre, conjugaisons correctes, ponctuation
@@ -64,6 +63,9 @@ RIGUEUR FACTUELLE :
 - La marque et l'entreprise s'appellent toujours « TERA EVENTS ». N'utilise jamais « Centre
   Commercial TERA » pour désigner l'entreprise, l'équipe ou le service traiteur. Cette expression
   est réservée exclusivement à une indication de localisation explicite.
+- Ne répète pas « Abidjan », « Cocody », « Deux-Plateaux » ou un quartier dans le corps du texte.
+  La localisation complète est ajoutée automatiquement après les contacts. Une référence locale
+  n'est autorisée dans le corps que si elle apporte une information indispensable au sujet.
 
 STRUCTURE DES LÉGENDES :
 - Même courte, chaque légende doit être rédigée en 2 à 4 paragraphes aérés, séparés par une ligne
@@ -78,8 +80,8 @@ STRUCTURE DES LÉGENDES :
 TON DE MARQUE :
 - Chaleureux, précis, sensoriel (matières, lumière, ambiance) plutôt que des superlatifs vides.
 - Toujours une raison concrète d'écrire à la fin du texte, jamais un simple "suivez-nous".
-- Ancrage local assumé : saisons ivoiriennes, quartiers d'Abidjan, spécialités locales, F CFA sans
-  détour.
+- Utilise les saisons ivoiriennes, les spécialités locales et le F CFA seulement quand le sujet le
+  justifie. Ne force jamais un quartier ou le mot « Abidjan » dans une accroche.
 - On évite de cacher le prix par réflexe : la transparence rassure plus qu'elle ne dévalorise.
 
 FAITS TERA EVENTS (seule source pour tout chiffre, prix, délai ou nom cité) :
@@ -118,10 +120,10 @@ const SCHEMAS = {
     schema: `{
   "slides": [
     { "titre_normal": "Première partie du titre de couverture (2-4 mots)", "titre_accent": "Partie accentuée du titre (1-3 mots)" },
-    { "tag_formule": "3-4 mots MAJUSCULES", "titre_normal": "Première partie du titre", "titre_accent": "Partie accentuée du titre", "texte": "1-2 phrases (25-40 mots)" },
-    { "tag_formule": "3-4 mots MAJUSCULES", "titre_normal": "Première partie du titre", "titre_accent": "Partie accentuée du titre", "texte": "1-2 phrases (25-40 mots)" },
-    { "tag_formule": "3-4 mots MAJUSCULES", "titre_normal": "Première partie du titre", "titre_accent": "Partie accentuée du titre", "texte": "1-2 phrases (25-40 mots)" },
-    { "tag_formule": "3-4 mots MAJUSCULES pour la conclusion", "titre_normal": "Première partie du titre de conclusion", "titre_accent": "Partie accentuée du titre", "texte": "1-2 phrases de synthèse (20-30 mots)", "cta_label": "3-5 mots MAJUSCULES, ex. 'DEMANDEZ VOTRE DEVIS'" }
+    { "tag_formule": "2-4 mots MAJUSCULES", "titre_normal": "2-4 mots", "titre_accent": "1-3 mots", "texte": "1 phrase courte, 10-15 mots maximum" },
+    { "tag_formule": "2-4 mots MAJUSCULES", "titre_normal": "2-4 mots", "titre_accent": "1-3 mots", "texte": "1 phrase courte, 10-15 mots maximum" },
+    { "tag_formule": "2-4 mots MAJUSCULES", "titre_normal": "2-4 mots", "titre_accent": "1-3 mots", "texte": "1 phrase courte, 10-15 mots maximum" },
+    { "tag_formule": "2-4 mots MAJUSCULES", "titre_normal": "2-4 mots", "titre_accent": "1-3 mots", "texte": "1 phrase courte, 10-15 mots maximum", "cta_label": "3-5 mots MAJUSCULES, ex. 'DEMANDEZ VOTRE DEVIS'" }
   ],
   "caption": "Légende complète du post (300-450 caractères), qui pose le sujet du carrousel et se termine par une invitation concrète",
   "hashtags": ["5 à 8 hashtags", "mélange marque/local/expertise"]
@@ -132,10 +134,10 @@ const SCHEMAS = {
     angle: "Le conseil du mercredi : un carrousel pratique de 4 slides, un conseil concret applicable par n'importe quel client TERA (traiteur, décoration ou event planning), pas une leçon abstraite.",
     schema: `{
   "slides": [
-    { "repere": "Court repère numéroté, ex. '01 — L'arrivée'", "titre": "Une phrase-titre marquante (10-16 mots)", "texte": "1-2 phrases concrètes et actionnables (20-35 mots)" },
+    { "repere": "Court repère numéroté, ex. '01. L'arrivée'", "titre": "Titre de 5-8 mots, 55 caractères maximum", "texte": "1 phrase concrète, 10-14 mots, 90 caractères maximum" },
     { "repere": "...", "titre": "...", "texte": "..." },
     { "repere": "...", "titre": "...", "texte": "..." },
-    { "repere": "Repère de conclusion", "titre": "Titre de conclusion", "conclusion": "1 phrase de clôture (15-25 mots)", "cta_question": "Une question courte (5-8 mots)", "cta_action": "2-3 mots MAJUSCULES, ex. 'ON EN PARLE'" }
+    { "repere": "Repère de conclusion", "titre": "Titre de 5-8 mots, 55 caractères maximum", "conclusion": "1 phrase courte, 10-14 mots maximum", "cta_question": "Une question courte (4-7 mots)", "cta_action": "2-3 mots MAJUSCULES, ex. 'ON EN PARLE'" }
   ],
   "caption": "Légende complète du post (300-450 caractères)",
   "hashtags": ["5 à 8 hashtags", "mélange marque/local/expertise"]
@@ -176,7 +178,7 @@ const SCHEMAS = {
     schema: `{
   "slides": [{
     "citation_accent": "L’accroche saisonnière ou le moment clé en 2-5 mots, par exemple 'Rentrée corporate :'",
-    "citation_main": "La suite de la citation en 12-22 mots, concrète et directement liée à l’événement"
+    "citation_main": "La suite de la citation en 8-14 mots, concrète et directement liée à l’événement"
   }],
   "caption": "Légende complète du post (250-400 caractères)",
   "hashtags": ["5 à 8 hashtags", "mélange marque/local/saisonnier"]
@@ -187,8 +189,8 @@ const SCHEMAS = {
     angle: "L'Ancrage du vendredi : un message plus direct que la citation, avec un vrai appel à l'action visible, toujours ancré dans la saison ou le calendrier ivoirien du moment.",
     schema: `{
   "slides": [{
-    "headline": "Titre fort (10-16 mots), ancré dans une saison ou un moment ivoirien précis",
-    "body": "1 phrase d'appui (15-25 mots)"
+    "headline": "Titre fort de 6-10 mots, 65 caractères maximum",
+    "body": "1 phrase d'appui de 10-14 mots maximum"
   }],
   "caption": "Légende complète du post (250-400 caractères)",
   "hashtags": ["5 à 8 hashtags", "mélange marque/local/saisonnier"]
@@ -212,7 +214,7 @@ const layoutRule = key === "savoirfaire:chiffre"
 
 const variationRule = `\nVARIATION OBLIGATOIRE : fais varier le sujet, l'accroche, les exemples et la formulation d'une semaine a l'autre. Ne recycle jamais une publication precedente.`;
 
-const visualCopyRule = `\nREGLE ABSOLUE POUR LES VISUELS : ecris court et precis. Un titre doit se lire en un coup d'oeil, sans phrase inutile ni surcharge. Chaque texte secondaire pose sur une image doit contenir au maximum 16 mots et rester idealement sous 100 caracteres. Respecte strictement les limites plus courtes du schema. Si une idee est trop longue, raccourcis-la au lieu de remplir le visuel. Reserve les explications developpees a la legende du post. Le contenu doit rester lisible sur l'ecran d'un telephone.`;
+const visualCopyRule = `\nREGLE ABSOLUE POUR LES VISUELS : ecris COURT et accrocheur. Aucun champ de texte ne doit occuper plus de 3 lignes dans le gabarit. Un titre contient 8 mots maximum et 55 caracteres maximum, sauf limite plus courte du schema. Un texte secondaire contient 14 mots maximum et 90 caracteres maximum. Une seule idee par champ. Si le texte depasse, coupe l'idee et garde l'explication pour la legende. N'ajoute jamais Abidjan, Cocody ou un quartier pour donner artificiellement une couleur locale. Le visuel doit respirer et rester lisible sur un telephone.`;
 
 const systemPrompt = `${CHARTE}
 
