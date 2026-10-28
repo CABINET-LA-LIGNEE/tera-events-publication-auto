@@ -69,6 +69,10 @@ e-mail de validation. Aucun nom ou prénom de membre de l'équipe n'est autoris�
 un contrôle bloque notamment toute occurrence des membres connus avant la création des visuels.
 
 La variante `savoirfaire:chiffre` est toujours rendue comme un carrousel graphique de cinq slides.
+Le pack de validation affiche systématiquement toutes les slides de chaque carrousel, numérotées et
+dans leur ordre de publication. La décision Valider / Modifier / Refuser reste unique par publication,
+mais elle porte sur l'ensemble des visuels affichés ; aucune slide ne peut être programmée sans avoir
+été présentée dans le pack.
 Elle n'accepte aucune photo de fond, y compris lorsqu'une image est produite ou transmise par erreur
 en amont. Les deux garde-fous du workflow retirent et ignorent systématiquement ce champ.
 

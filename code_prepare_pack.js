@@ -59,10 +59,26 @@ slots.forEach(s => {
   const warningBanner = s.looksFailed
     ? `<p style="color:#b00; font-weight:bold;">⚠️ La génération a échoué pour cette publication (réponse non exploitable). Choisissez "Modifier" pour la régénérer automatiquement, un commentaire n'est pas nécessaire.</p>`
     : "";
+  const orderedVisuals = [...(s.renderItems || [])]
+    .sort((a, b) => (a.slide_index || 1) - (b.slide_index || 1));
+  const visualGallery = orderedVisuals
+    .map((item, index) => {
+      const slideNumber = item.slide_index || index + 1;
+      const totalSlides = item.slide_count || orderedVisuals.length;
+      return `<div style="display:inline-block;vertical-align:top;width:280px;margin:0 14px 18px 0;">` +
+        `<p style="margin:0 0 6px;font-weight:700;">Visuel ${slideNumber}/${totalSlides}</p>` +
+        `<img src="${escapeHtml(item.url)}" alt="${escapeHtml(`${s.jour} — visuel ${slideNumber} sur ${totalSlides}`)}" style="display:block;width:100%;max-width:280px;height:auto;border-radius:8px;border:1px solid #e3e3e3" />` +
+        `</div>`;
+    })
+    .join("");
   fields.push({
     fieldLabel: " ",
     fieldType: "html",
-    html: `<h3>${escapeHtml(s.jour)} — ${escapeHtml(s.famille)} / ${escapeHtml(s.variante)}</h3>${warningBanner}<img src="${s.heroImageUrl}" style="max-width:320px;border-radius:8px" /><p><b>${escapeHtml(s.titleText)}</b></p><p>${escapeHtml(s.caption)}</p>`
+    html: `<h3>${escapeHtml(s.jour)} — ${escapeHtml(s.famille)} / ${escapeHtml(s.variante)}</h3>` +
+      `${warningBanner}` +
+      `<p><b>${orderedVisuals.length > 1 ? `Carrousel complet — ${orderedVisuals.length} visuels à valider` : "Visuel à valider"}</b></p>` +
+      `<div style="font-size:0;">${visualGallery}</div>` +
+      `<p><b>${escapeHtml(s.titleText)}</b></p><p>${escapeHtml(s.caption)}</p>`
   });
   fields.push({
     fieldLabel: `${s.jour} — décision`,
