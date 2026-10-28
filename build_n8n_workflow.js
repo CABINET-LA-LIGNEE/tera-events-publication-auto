@@ -26,7 +26,7 @@ function decisionNode(name, position, value) {
   add(name, "n8n-nodes-base.if", position, { conditions: { options: { caseSensitive: true, typeValidation: "strict" }, conditions: [{ id: name.toLowerCase().replace(/\W+/g, "-"), leftValue: "={{ $json.decision }}", rightValue: value, operator: { type: "string", operation: "equals" } }], combinator: "and" }, options: {} }, 2.2);
 }
 
-add("Déclencheur Hebdomadaire (Dimanche)", "n8n-nodes-base.scheduleTrigger", [0, -160], { rule: { interval: [{ field: "weeks", triggerAtDay: [0], triggerAtHour: 7 }] } }, 1.3);
+add("Déclencheur Hebdomadaire (Dimanche)", "n8n-nodes-base.scheduleTrigger", [0, -160], { rule: { interval: [{ field: "weeks", triggerAtDay: [0], triggerAtHour: 18 }] } }, 1.3);
 add("Déclenchement Manuel", "n8n-nodes-base.manualTrigger", [0, 0], {}, 1);
 codeNode("Préparer les 3 publications", [240, 0], "code_prepare_pilliers.js");
 codeNode("Préparer le Prompt Claude", [480, 0], "code_prompt_prep.js", "runOnceForEachItem");

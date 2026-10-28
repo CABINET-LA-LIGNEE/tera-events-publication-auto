@@ -21,7 +21,13 @@ for (const item of merged) {
 const collected = [...unique.values()];
 state.weeklyPackAccumulator[executionKey] = collected;
 
-const requiredDays = ["Lundi", "Mercredi", "Vendredi"];
+// Le dimanche 1er novembre constitue une transition : le lundi 2 est déjà programmé. Le pack
+// de ce soir-là attend donc seulement mercredi et vendredi. Le cycle normal à trois jours reprend
+// automatiquement dès l'exécution hebdomadaire suivante.
+const todayUtc = new Date().toISOString().slice(0, 10);
+const requiredDays = todayUtc === "2026-11-01"
+  ? ["Mercredi", "Vendredi"]
+  : ["Lundi", "Mercredi", "Vendredi"];
 const complete = requiredDays.every(jour => {
   const slides = collected.filter(item => item.jour === jour);
   if (!slides.length) return false;

@@ -73,6 +73,11 @@ Le pack de validation affiche systématiquement toutes les slides de chaque carr
 dans leur ordre de publication. La décision Valider / Modifier / Refuser reste unique par publication,
 mais elle porte sur l'ensemble des visuels affichés ; aucune slide ne peut être programmée sans avoir
 été présentée dans le pack.
+
+Le déclencheur hebdomadaire s'exécute le dimanche à 18 h, heure d'Abidjan. Transition de reprise :
+le dimanche 1er novembre 2026, il produit uniquement les publications du mercredi 4 et du vendredi 6,
+car celle du lundi 2 est déjà programmée. Le cycle lundi-mercredi-vendredi reprend automatiquement
+dès le dimanche suivant.
 Elle n'accepte aucune photo de fond, y compris lorsqu'une image est produite ou transmise par erreur
 en amont. Les deux garde-fous du workflow retirent et ignorent systématiquement ce champ.
 

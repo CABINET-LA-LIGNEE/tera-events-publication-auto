@@ -34,13 +34,22 @@ const SLOTS = [
   { jour: "Vendredi", weekday: 5, famille: "ancrage" }
 ];
 
+// Transition de reprise : le lundi 2 novembre est déjà programmé dans Buffer par le pack validé
+// le 28 octobre. Lors de l'exécution du dimanche 1er novembre, ne générer que mercredi et
+// vendredi afin d'éviter un doublon. Dès le dimanche suivant, les trois créneaux habituels
+// reprennent automatiquement.
+const todayUtc = new Date().toISOString().slice(0, 10);
+const activeSlots = todayUtc === "2026-11-01"
+  ? SLOTS.filter(slot => slot.jour !== "Lundi")
+  : SLOTS;
+
 // Données statiques du workflow n8n : un index de rotation par famille, qui persiste d'une
 // exécution hebdomadaire à l'autre (équivalent de $getWorkflowStaticData('global') dans un nœud
 // Code n8n réel — représenté ici comme un objet passé/retourné pour rester testable hors n8n).
 const state = $getWorkflowStaticData("global");
 if (!state.rotation) state.rotation = { declic: 0, savoirfaire: 0, ancrage: 0 };
 
-const items = SLOTS.map(slot => {
+const items = activeSlots.map(slot => {
   const pool = POOLS[slot.famille];
   const idx = state.rotation[slot.famille] % pool.length;
   const variante = pool[idx];
