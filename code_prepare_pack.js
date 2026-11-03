@@ -20,6 +20,10 @@ function titleFor(renderBody) {
   return renderBody.titre || renderBody.headline || renderBody.citation || renderBody.chiffre || "";
 }
 
+// Fichier central modifiable dans lequel sont classées les créations de la semaine.
+// Ce lien est volontairement public au workflow : aucune clé ni aucun secret Figma n'est stocké ici.
+const FIGMA_PUBLICATIONS_URL = "https://www.figma.com/design/qGefo0KWEUg0fuMehhtiD1";
+
 const items = $input.all();
 const byJour = {};
 items.forEach(it => {
@@ -54,7 +58,15 @@ const slots = jourOrder
     };
   });
 
-const fields = [];
+const fields = [{
+  fieldLabel: " ",
+  fieldType: "html",
+  html: `<div style="padding:18px 20px;margin:0 0 22px;background:#07173d;border-radius:10px;color:#fff;">` +
+    `<h2 style="margin:0 0 10px;color:#fff;">Fichier Figma des publications TERA EVENTS</h2>` +
+    `<p style="margin:0 0 14px;line-height:1.5;">Consultez ou modifiez les visuels de la semaine dans le fichier central avant de valider leur programmation.</p>` +
+    `<a href="${FIGMA_PUBLICATIONS_URL}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:11px 18px;background:#efa8a6;color:#07173d;text-decoration:none;border-radius:999px;font-weight:700;">OUVRIR LES VISUELS DANS FIGMA</a>` +
+    `</div>`
+}];
 slots.forEach(s => {
   const warningBanner = s.looksFailed
     ? `<p style="color:#b00; font-weight:bold;">⚠️ La génération a échoué pour cette publication (réponse non exploitable). Choisissez "Modifier" pour la régénérer automatiquement, un commentaire n'est pas nécessaire.</p>`
@@ -96,6 +108,7 @@ slots.forEach(s => {
 return [{
   json: {
     slots,
+    figmaPublicationsUrl: FIGMA_PUBLICATIONS_URL,
     formFieldsJson: JSON.stringify(fields, null, 2)
   }
 }];

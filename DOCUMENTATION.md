@@ -74,6 +74,17 @@ dans leur ordre de publication. La décision Valider / Modifier / Refuser reste 
 mais elle porte sur l'ensemble des visuels affichés ; aucune slide ne peut être programmée sans avoir
 été présentée dans le pack.
 
+## Source Figma modifiable
+
+Tous les visuels validés doivent disposer d'une source modifiable dans le fichier Figma central
+`TERA EVENTS — Publications automatiques`. Le pack hebdomadaire contient systématiquement un bouton
+vers ce fichier : https://www.figma.com/design/qGefo0KWEUg0fuMehhtiD1
+
+Le fichier est organisé en trois pages : `À valider`, `Archives` et `Mode d’emploi`. Les exports PNG
+utilisés par Buffer ne remplacent jamais la source Figma éditable. La génération doit préserver des
+calques distincts pour les textes, les photos et les éléments graphiques afin que l'équipe puisse
+reprendre la main avant validation.
+
 Le déclencheur hebdomadaire s'exécute le dimanche à 18 h, heure d'Abidjan. Transition de reprise :
 le dimanche 1er novembre 2026, il produit uniquement les publications du mercredi 4 et du vendredi 6,
 car celle du lundi 2 est déjà programmée. Le cycle lundi-mercredi-vendredi reprend automatiquement
