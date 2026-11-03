@@ -7,8 +7,20 @@ const pilierConfig = $("Préparer les 3 publications").all().map(i => i.json);
 
 const results = [];
 slots.forEach(s => {
-  const decision = formData[`${s.jour} — décision`];
-  const commentaire = formData[`${s.jour} — Commentaire (si Modifier)`] || "";
+  const decisionTexte = formData[`${s.jour} — décision texte`];
+  const decisionVisuelle = formData[`${s.jour} — décision visuelle`];
+  const decisionSources = s.sourceRequired
+    ? formData[`${s.jour} — contrôle des sources`]
+    : "Sans objet";
+  const commentaire = formData[`${s.jour} — Commentaire (requis si Modifier)`] || "";
+  if ((decisionTexte === "Modifier" || decisionVisuelle === "Modifier") && !commentaire.trim()) {
+    throw new Error(`${s.jour} : un commentaire est requis lorsqu'une modification est demandée.`);
+  }
+  const decision = decisionTexte === "Refuser" || decisionVisuelle === "Refuser"
+    ? "Refuser"
+    : decisionTexte === "Valider" && decisionVisuelle === "Valider" && decisionSources !== "Sources à revoir"
+      ? "Valider"
+      : "Modifier";
   const config = pilierConfig.find(c => c.jour === s.jour) || {};
   results.push({
     json: {
@@ -18,6 +30,9 @@ slots.forEach(s => {
       attempt: config.attempt || 1,
       target_due_at: config.target_due_at,
       decision,
+      decisionTexte,
+      decisionVisuelle,
+      decisionSources,
       commentaire,
       renderItems: s.renderItems
     }

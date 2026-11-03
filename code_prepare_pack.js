@@ -46,10 +46,18 @@ const slots = jourOrder
     // ici plutôt que d'afficher un aperçu vide sans explication.
     const looksFailed = !caption && !rawTitle;
     const titleText = rawTitle || `${jour} — ${group[0].famille}/${group[0].variante}`;
+    const sourceRequired =
+      (group[0].famille === "savoirfaire" && group[0].variante === "chiffre") ||
+      (group[0].famille === "declic" && group[0].variante === "traiteur");
     return {
       jour,
       famille: group[0].famille,
       variante: group[0].variante,
+      publicationId: group[0].publication_id || `TERA-${String(group[0].target_due_at || "sans-date").slice(0, 10)}-${jour.toUpperCase()}`,
+      contentRevision: group[0].content_revision || 1,
+      targetDueAt: group[0].target_due_at,
+      figmaUrl: group[0].figma_url || FIGMA_PUBLICATIONS_URL,
+      sourceRequired,
       heroImageUrl: hero.url,
       titleText,
       caption,
@@ -88,21 +96,39 @@ slots.forEach(s => {
     fieldType: "html",
     html: `<h3>${escapeHtml(s.jour)} — ${escapeHtml(s.famille)} / ${escapeHtml(s.variante)}</h3>` +
       `${warningBanner}` +
+      `<p><b>Publication :</b> ${escapeHtml(s.publicationId)} · version ${escapeHtml(s.contentRevision)}<br>` +
+      `<b>Créneau :</b> ${escapeHtml(s.targetDueAt || "à confirmer")} · Africa/Abidjan<br>` +
+      `<b>Réseaux :</b> Facebook, Instagram et LinkedIn</p>` +
+      `<p><a href="${escapeHtml(s.figmaUrl)}" target="_blank" rel="noopener noreferrer"><b>Ouvrir la section Figma de cette publication</b></a></p>` +
       `<p><b>${orderedVisuals.length > 1 ? `Carrousel complet — ${orderedVisuals.length} visuels à valider` : "Visuel à valider"}</b></p>` +
       `<div style="font-size:0;">${visualGallery}</div>` +
       `<h4 style="margin:18px 0 8px;">Texte de la publication à valider</h4>` +
       `<p><b>${escapeHtml(s.titleText)}</b></p>` +
       `<p style="line-height:1.55;">${escapeHtml(s.caption)}</p>` +
-      `<p style="color:#555;"><i>La décision ci-dessous porte sur l'ensemble des visuels affichés et sur le texte de cette publication.</i></p>`
+      `<p style="color:#555;"><i>Le texte et les visuels doivent être décidés séparément. Aucun accord manquant ne permet la programmation.</i></p>`
   });
   fields.push({
-    fieldLabel: `${s.jour} — décision`,
+    fieldLabel: `${s.jour} — décision texte`,
     fieldType: "dropdown",
     fieldOptions: { values: [{ option: "Valider" }, { option: "Modifier" }, { option: "Refuser" }] },
     requiredField: true
   });
   fields.push({
-    fieldLabel: `${s.jour} — Commentaire (si Modifier)`,
+    fieldLabel: `${s.jour} — décision visuelle`,
+    fieldType: "dropdown",
+    fieldOptions: { values: [{ option: "Valider" }, { option: "Modifier" }, { option: "Refuser" }] },
+    requiredField: true
+  });
+  if (s.sourceRequired) {
+    fields.push({
+      fieldLabel: `${s.jour} — contrôle des sources`,
+      fieldType: "dropdown",
+      fieldOptions: { values: [{ option: "Sources confirmées" }, { option: "Sources à revoir" }] },
+      requiredField: true
+    });
+  }
+  fields.push({
+    fieldLabel: `${s.jour} — Commentaire (requis si Modifier)`,
     fieldType: "textarea",
     requiredField: false
   });

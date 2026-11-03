@@ -86,6 +86,12 @@ utilisés par Buffer ne remplacent jamais la source Figma éditable. La généra
 calques distincts pour les textes, les photos et les éléments graphiques afin que l'équipe puisse
 reprendre la main avant validation.
 
+Le formulaire hebdomadaire collecte désormais deux décisions indépendantes pour chaque publication :
+une décision sur le texte et une décision sur les visuels. Les publications factuelles ou tarifaires
+ajoutent un contrôle des sources. La programmation reste bloquée tant que les deux décisions ne sont
+pas `Valider`, que les sources requises ne sont pas confirmées ou qu'une correction a modifié la
+version présentée. Les commentaires sont obligatoires lorsqu'une modification est demandée.
+
 Le déclencheur hebdomadaire s'exécute le dimanche à 18 h, heure d'Abidjan. Transition de reprise :
 le dimanche 1er novembre 2026, il produit uniquement les publications du mercredi 4 et du vendredi 6,
 car celle du lundi 2 est déjà programmée. Le cycle lundi-mercredi-vendredi reprend automatiquement
