@@ -78,7 +78,8 @@ mais elle porte sur l'ensemble des visuels affichés ; aucune slide ne peut êtr
 
 Tous les visuels validés doivent disposer d'une source modifiable dans le fichier Figma central
 `TERA EVENTS — Publications automatiques`. Le pack hebdomadaire contient systématiquement un bouton
-vers ce fichier : https://www.figma.com/design/qGefo0KWEUg0fuMehhtiD1
+vers la page de travail de la semaine dans le fichier maître :
+https://www.figma.com/design/vZn7iir8VGn5fh8M9tIfXZ/GABARIT-TERA-EVENTS?node-id=230-2
 
 Le fichier est organisé en trois pages : `À valider`, `Archives` et `Mode d’emploi`. Les exports PNG
 utilisés par Buffer ne remplacent jamais la source Figma éditable. La génération doit préserver des

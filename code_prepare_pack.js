@@ -22,7 +22,7 @@ function titleFor(renderBody) {
 
 // Fichier central modifiable dans lequel sont classées les créations de la semaine.
 // Ce lien est volontairement public au workflow : aucune clé ni aucun secret Figma n'est stocké ici.
-const FIGMA_PUBLICATIONS_URL = "https://www.figma.com/design/qGefo0KWEUg0fuMehhtiD1";
+const FIGMA_PUBLICATIONS_URL = "https://www.figma.com/design/vZn7iir8VGn5fh8M9tIfXZ/GABARIT-TERA-EVENTS?node-id=230-2";
 
 const items = $input.all();
 const byJour = {};
