@@ -90,7 +90,10 @@ slots.forEach(s => {
       `${warningBanner}` +
       `<p><b>${orderedVisuals.length > 1 ? `Carrousel complet — ${orderedVisuals.length} visuels à valider` : "Visuel à valider"}</b></p>` +
       `<div style="font-size:0;">${visualGallery}</div>` +
-      `<p><b>${escapeHtml(s.titleText)}</b></p><p>${escapeHtml(s.caption)}</p>`
+      `<h4 style="margin:18px 0 8px;">Texte de la publication à valider</h4>` +
+      `<p><b>${escapeHtml(s.titleText)}</b></p>` +
+      `<p style="line-height:1.55;">${escapeHtml(s.caption)}</p>` +
+      `<p style="color:#555;"><i>La décision ci-dessous porte sur l'ensemble des visuels affichés et sur le texte de cette publication.</i></p>`
   });
   fields.push({
     fieldLabel: `${s.jour} — décision`,
