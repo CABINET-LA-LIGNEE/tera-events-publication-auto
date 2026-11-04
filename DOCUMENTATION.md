@@ -1,13 +1,13 @@
 # TERA EVENTS — Pipeline de publication automatisée
 
-Documentation du projet, en cours de construction. Projet indépendant de `la-lignee-publication-auto`, mais qui en réplique l'architecture éprouvée (n8n + render-service Node/Playwright, validation humaine avant publication).
+Source de vérité technique du projet en production. Projet indépendant de `la-lignee-publication-auto`, avec ses propres credentials, canaux, règles, rotation et registre.
 
 ## 1. Vue d'ensemble
 
 TERA EVENTS publie 3 fois par semaine (lundi, mercredi, vendredi) sur Facebook, Instagram et LinkedIn, chaque créneau ayant un angle fixe. Le week-end reste au geste spontané de l'agence (réalisations, reels), hors de ce pipeline.
 
-**Composants prévus :**
-- **n8n** — même instance que La Lignée, workflow indépendant `TERA EVENTS - Publication Hebdomadaire` (`wrq6FhVvULDUuUUp`), actif avec un déclenchement le dimanche à 07 h (Africa/Abidjan).
+**Composants actifs :**
+- **n8n** — workflow indépendant `TERA EVENTS - Publication Hebdomadaire` (`wrq6FhVvULDUuUUp`), actif et publié, déclenché le dimanche à 18 h (Africa/Abidjan).
 - **OpenAI Responses API** — rédaction dynamique des textes selon le sujet, sans recherche web, via le credential n8n isolé `OpenAI - TERA EVENTS`.
 - **OpenAI Image API** — génération des photos de fond contextuelles pour les gabarits photographiques. Aucun texte, logo ni élément de composition n'est généré dans l'image ; la charte reste appliquée par Figma et le render-service.
 - **`render-service`** — service Node.js/Playwright déployé dans le conteneur Docker séparé `tera-render`. n8n le joint sur `http://tera-render:3000` et les images destinées aux réseaux sont servies par `https://tera-visuels.srv1896382.hstgr.cloud`.
@@ -121,3 +121,66 @@ Les trois canaux Buffer TERA sont configurés dans l'environnement local et dans
 - Facebook : `6a982d93065799be4673b410`
 - Instagram : `6a982dc0065799be4673b59e`
 - LinkedIn : `6a982ded065799be4673b71c`
+
+## 7. Règles d'exploitation obligatoires
+
+- Une seule planification récurrente TERA doit être active.
+- Les credentials attendus sont `OpenAI - TERA EVENTS`, `TERA Render Service Token`, `Gmail SMTP - La Lignée` et `Header Auth account` pour Buffer TERA.
+- Le credential Buffer de La Lignée ne doit jamais être utilisé pour les canaux TERA.
+- Une clé enregistrée dans n8n doit également être rattachée au nœud concerné ; sinon n8n renvoie `Credentials not found`.
+- Toute modification n8n doit être publiée. Une sauvegarde en brouillon ne modifie pas la production.
+- Aucun test `createPost` ne doit viser les canaux réels sans accord explicite.
+- Une réponse GraphQL Buffer est contrôlée même lorsque le statut HTTP est 200.
+- Une date dépassée n'est jamais publiée « maintenant » : une nouvelle date doit être approuvée.
+- Une ancienne validation ne vaut jamais pour une nouvelle version du texte ou des visuels.
+- Les tests ne sont supprimés qu'après intégration de leur logique utile dans le workflow principal.
+
+## 8. Échéances
+
+| Échéance | Action |
+|---|---|
+| Dimanche 18 h | Génération du pack hebdomadaire |
+| Dimanche soir | Validation recommandée pour protéger le créneau du lundi |
+| Lundi 08 h | Le Déclic |
+| Mercredi 08 h | Savoir-Faire |
+| Vendredi 08 h | L'Ancrage |
+| Chaque semaine | Contrôle des identifiants et statuts Buffer |
+| Chaque mois | Contrôle crédits OpenAI, Buffer, Gmail, espace disque et accès Figma |
+
+La seule limite technique absolue est que le créneau soit encore futur au moment de la programmation. Une publication en attente ne doit pas provoquer un rattrapage automatique.
+
+## 9. Règles éditoriales et graphiques à ne pas casser
+
+- Toujours nommer la marque `TERA EVENTS`.
+- Réserver `Centre Commercial TERA` à la localisation.
+- Ne citer aucun nom ni prénom d'un membre de l'équipe.
+- Utiliser les catalogues TERA comme source prioritaire pour les menus, formules, prix et conditions.
+- Ne jamais inventer de fait, prix, disponibilité ou résultat client.
+- Limiter les textes affichés sur les visuels à trois lignes, sans débordement.
+- Maintenir la lisibilité mobile des textes secondaires.
+- Conserver fixes le logo, le titre de rubrique et le pied de page d'une slide à l'autre.
+- Le Chiffre du mercredi est un carrousel sans photo de fond.
+- Présenter toutes les slides de chaque carrousel dans leur ordre avant validation.
+- Une modification du texte d'une slide invalide les accords texte et visuel.
+- Une modification de photo, couleur ou mise en page invalide l'accord visuel.
+
+Le bloc de contact obligatoire reste : téléphone/WhatsApp `+225 05 66 22 10 10`, `reservations@tera.events`, localisation au Centre Commercial TERA, 7e Tranche, Deux-Plateaux, et visites uniquement sur rendez-vous.
+
+## 10. Figma et validation
+
+Le mode Figma actuel est **assisté**. n8n présente le fichier central et les liens dans le pack, mais ne possède pas encore d'adaptateur autonome capable d'écrire des calques. Ne jamais annoncer une automatisation Figma autonome tant qu'elle n'a pas été déployée et testée.
+
+Pour chaque publication, le formulaire collecte séparément la décision texte et la décision visuelle. `Modifier` exige un commentaire. Un refus, une réponse absente, une source à revoir ou un seul accord bloque Buffer. Une retouche Figma doit être réexportée et soumise à une nouvelle validation de la version concernée.
+
+## 11. Synchronisation n8n et GitHub
+
+n8n est la source d'exécution. GitHub est la source de code, documentation et reprise. Après tout changement n8n :
+
+1. exporter la version active ;
+2. remplacer `workflow-tera-events.json` ;
+3. reporter les scripts des nœuds dans les fichiers `code_*.js` ;
+4. exécuter les contrôles du render-service ;
+5. mettre à jour `DOCUMENTATION.md` et `RUNBOOK.md` ;
+6. pousser le commit.
+
+Une modification présente seulement dans n8n ou seulement dans GitHub est une divergence à corriger.
