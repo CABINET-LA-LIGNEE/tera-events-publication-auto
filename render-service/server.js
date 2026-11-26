@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const { chromium } = require("playwright");
 const { layouts } = require("./layouts");
 const { fontCss } = require("./font-css");
+const { templates: templateSpecs } = require("./template-specs.json");
 
 const PORT = process.env.PORT || 3000;
 const AUTH_TOKEN = process.env.RENDER_AUTH_TOKEN || "";
@@ -276,7 +277,16 @@ app.post("/render/:template", async (req, res) => {
     const cfg = layouts[templateName];
     if (!cfg) return res.status(400).json({ error: "unknown template", known: Object.keys(layouts) });
 
-    const html = buildHtml(templateName, req.body || {});
+    const data = req.body || {};
+    for (const [field, spec] of Object.entries(templateSpecs[templateName].fields)) {
+      if (!spec.static) continue;
+      const value = typeof data[field] === "string" ? data[field] : "";
+      const length = Array.from(value).length;
+      if ((spec.required && !value.trim()) || length > spec.maxChars || value.split(/\r\n|[\r\n]/).length > spec.maxLines) {
+        return res.status(400).json({ error: "invalid_static_field", field, length, maxChars: spec.maxChars });
+      }
+    }
+    const html = buildHtml(templateName, data);
 
     if (req.query.debug === "html") {
       res.set("Content-Type", "text/plain; charset=utf-8");
@@ -357,4 +367,4 @@ if (require.main === module) {
   app.listen(PORT, () => console.log("TERA EVENTS render service listening on port " + PORT));
 }
 
-module.exports = { buildHtml };
+module.exports = { app, buildHtml };

@@ -1,0 +1,186 @@
+{
+  "version": 1,
+  "templates": {
+    "tera-declic-eventplanning-s1": {
+      "fields": {
+        "titre_normal+titre_accent": { "maxChars": 70, "maxLines": 4, "size": 90, "minSize": 72, "required": true }
+      }
+    },
+    "tera-declic-eventplanning-s2": {
+      "fields": {
+        "tag_formule": { "maxChars": 25, "maxLines": 1, "size": 20, "minSize": 16, "required": true },
+        "titre_normal+titre_accent": { "maxChars": 26, "maxLines": 1, "size": 64, "minSize": 52, "required": true },
+        "texte": { "maxChars": 210, "maxLines": 3, "size": 24, "minSize": 20, "required": true }
+      }
+    },
+    "tera-declic-eventplanning-s3": {
+      "fields": {
+        "tag_formule": { "maxChars": 25, "maxLines": 1, "size": 20, "minSize": 16, "required": true },
+        "titre_normal+titre_accent": { "maxChars": 26, "maxLines": 1, "size": 64, "minSize": 52, "required": true },
+        "texte": { "maxChars": 210, "maxLines": 3, "size": 24, "minSize": 20, "required": true }
+      }
+    },
+    "tera-declic-eventplanning-s4": {
+      "fields": {
+        "tag_formule": { "maxChars": 25, "maxLines": 1, "size": 20, "minSize": 16, "required": true },
+        "titre_normal+titre_accent": { "maxChars": 26, "maxLines": 1, "size": 64, "minSize": 52, "required": true },
+        "texte": { "maxChars": 210, "maxLines": 3, "size": 24, "minSize": 20, "required": true }
+      }
+    },
+    "tera-declic-eventplanning-s5": {
+      "fields": {
+        "tag_formule": { "maxChars": 25, "maxLines": 1, "size": 20, "minSize": 16, "required": true },
+        "titre_normal+titre_accent": { "maxChars": 26, "maxLines": 1, "size": 64, "minSize": 52, "required": true },
+        "texte": { "maxChars": 210, "maxLines": 3, "size": 24, "minSize": 20, "required": true },
+        "cta_label": { "maxChars": 24, "maxLines": 1, "size": 22, "minSize": 18, "required": true }
+      }
+    },
+    "tera-declic-traiteur": {
+      "fields": {
+        "accroche": { "maxChars": 30, "maxLines": 1, "size": 50, "minSize": 40, "required": true },
+        "titre": { "maxChars": 15, "maxLines": 1, "size": 80, "minSize": 64, "required": true },
+        "texte": { "maxChars": 100, "maxLines": 3, "size": 35, "minSize": 28, "required": true },
+        "prix": { "maxChars": 6, "maxLines": 1, "size": 178, "minSize": 143, "required": true }
+      }
+    },
+    "tera-savoirfairemercredi-s1": {
+      "fields": {
+        "titre": { "maxChars": 38, "maxLines": 3, "size": 112, "minSize": 90, "required": true },
+        "texte": { "maxChars": 200, "maxLines": 3, "size": 26, "minSize": 21, "required": true }
+      }
+    },
+    "tera-savoirfairemercredi-s2": {
+      "fields": {
+        "repere": { "maxChars": 20, "maxLines": 1, "size": 26, "minSize": 21, "required": true },
+        "titre": { "maxChars": 60, "maxLines": 3, "size": 74, "minSize": 60, "required": true },
+        "texte": { "maxChars": 140, "maxLines": 2, "size": 26, "minSize": 21, "required": true }
+      }
+    },
+    "tera-savoirfairemercredi-s3": {
+      "fields": {
+        "repere": { "maxChars": 20, "maxLines": 1, "size": 36, "minSize": 29, "required": true },
+        "titre": { "maxChars": 40, "maxLines": 2, "size": 74, "minSize": 60, "required": true },
+        "moment1_horaire": { "maxChars": 5, "maxLines": 1, "size": 30, "minSize": 24, "required": true },
+        "moment1_titre": { "maxChars": 14, "maxLines": 1, "size": 28, "minSize": 23, "required": true },
+        "moment1_texte": { "maxChars": 70, "maxLines": 1, "size": 20, "minSize": 16, "required": true },
+        "moment2_horaire": { "maxChars": 5, "maxLines": 1, "size": 30, "minSize": 24, "required": true },
+        "moment2_titre": { "maxChars": 14, "maxLines": 1, "size": 28, "minSize": 23, "required": true },
+        "moment2_texte": { "maxChars": 70, "maxLines": 1, "size": 20, "minSize": 16, "required": true },
+        "moment3_horaire": { "maxChars": 5, "maxLines": 1, "size": 30, "minSize": 24, "required": true },
+        "moment3_titre": { "maxChars": 14, "maxLines": 1, "size": 28, "minSize": 23, "required": true },
+        "moment3_texte": { "maxChars": 70, "maxLines": 1, "size": 20, "minSize": 16, "required": true }
+      }
+    },
+    "tera-savoirfairemercredi-s4": {
+      "fields": {
+        "repere": { "maxChars": 20, "maxLines": 1, "size": 26, "minSize": 21, "required": true },
+        "titre": { "maxChars": 40, "maxLines": 2, "size": 74, "minSize": 60, "required": true },
+        "texte": { "maxChars": 140, "maxLines": 2, "size": 26, "minSize": 21, "required": true },
+        "cta_question": { "maxChars": 30, "maxLines": 1, "size": 20, "minSize": 16, "required": true }
+      }
+    },
+    "tera-savoirfairetraiteur-s1": {
+      "fields": {
+        "badge1": { "maxChars": 32, "maxLines": 1, "size": 35, "minSize": 28, "required": true },
+        "badge2": { "maxChars": 30, "maxLines": 1, "size": 40, "minSize": 32, "required": true },
+        "texte": { "maxChars": 175, "maxLines": 3, "size": 25, "minSize": 20, "required": true }
+      }
+    },
+    "tera-savoirfairetraiteur-s2": {
+      "fields": {
+        "gamme_ligne1": { "maxChars": 8, "maxLines": 1, "size": 80, "minSize": 64, "required": true },
+        "gamme_ligne2": { "maxChars": 12, "maxLines": 1, "size": 96, "minSize": 77, "required": true },
+        "badge": { "maxChars": 32, "maxLines": 1, "size": 28, "minSize": 23, "required": true },
+        "texte": { "maxChars": 125, "maxLines": 2, "size": 24, "minSize": 20, "required": true }
+      }
+    },
+    "tera-savoirfairetraiteur-s3": {
+      "fields": {
+        "gamme_ligne1": { "maxChars": 8, "maxLines": 1, "size": 80, "minSize": 64, "required": true },
+        "gamme_ligne2": { "maxChars": 12, "maxLines": 1, "size": 96, "minSize": 77, "required": true },
+        "badge": { "maxChars": 32, "maxLines": 1, "size": 28, "minSize": 23, "required": true },
+        "texte": { "maxChars": 125, "maxLines": 2, "size": 24, "minSize": 20, "required": true }
+      }
+    },
+    "tera-savoirfairetraiteur-s4": {
+      "fields": {
+        "gamme_ligne1": { "maxChars": 8, "maxLines": 1, "size": 80, "minSize": 64, "required": true },
+        "gamme_ligne2": { "maxChars": 12, "maxLines": 1, "size": 96, "minSize": 77, "required": true },
+        "badge": { "maxChars": 32, "maxLines": 1, "size": 28, "minSize": 23, "required": true },
+        "texte": { "maxChars": 125, "maxLines": 2, "size": 24, "minSize": 20, "required": true }
+      }
+    },
+    "tera-savoirfairetraiteur-s5": {
+      "fields": {
+        "gamme_ligne1": { "maxChars": 8, "maxLines": 1, "size": 80, "minSize": 64, "required": true },
+        "gamme_ligne2": { "maxChars": 12, "maxLines": 1, "size": 96, "minSize": 77, "required": true },
+        "badge": { "maxChars": 32, "maxLines": 1, "size": 28, "minSize": 23, "required": true },
+        "texte": { "maxChars": 125, "maxLines": 2, "size": 24, "minSize": 20, "required": true }
+      }
+    },
+    "tera-chiffremercredi-s1": {
+      "fields": {
+        "edition_label": { "maxChars": 22, "maxLines": 1, "size": 24, "minSize": 20, "required": true, "static": true },
+        "chiffre": { "maxChars": 3, "maxLines": 1, "size": 400, "minSize": 320, "required": true },
+        "unite": { "maxChars": 10, "maxLines": 1, "size": 50, "minSize": 40, "required": true },
+        "headline": { "maxChars": 45, "maxLines": 2, "size": 50, "minSize": 40, "required": true },
+        "insight": { "maxChars": 70, "maxLines": 1, "size": 25, "minSize": 20, "required": true }
+      }
+    },
+    "tera-chiffremercredi-s2": {
+      "fields": {
+        "edition_label": { "maxChars": 22, "maxLines": 1, "size": 24, "minSize": 20, "required": true, "static": true },
+        "surtitre": { "maxChars": 35, "maxLines": 1, "size": 35, "minSize": 28, "required": true },
+        "statistique": { "maxChars": 5, "maxLines": 1, "size": 156, "minSize": 125, "required": true },
+        "cartouche": { "maxChars": 26, "maxLines": 1, "size": 34, "minSize": 28, "required": true },
+        "titre": { "maxChars": 45, "maxLines": 2, "size": 58, "minSize": 47, "required": true },
+        "texte": { "maxChars": 120, "maxLines": 2, "size": 25, "minSize": 20, "required": true }
+      }
+    },
+    "tera-chiffremercredi-s3": {
+      "fields": {
+        "edition_label": { "maxChars": 22, "maxLines": 1, "size": 24, "minSize": 20, "required": true, "static": true },
+        "surtitre": { "maxChars": 35, "maxLines": 1, "size": 35, "minSize": 28, "required": true },
+        "titre": { "maxChars": 26, "maxLines": 1, "size": 58, "minSize": 47, "required": true },
+        "conseil1_titre": { "maxChars": 30, "maxLines": 1, "size": 35, "minSize": 28, "required": true },
+        "conseil1_texte": { "maxChars": 65, "maxLines": 1, "size": 25, "minSize": 20, "required": true },
+        "conseil2_titre": { "maxChars": 30, "maxLines": 1, "size": 35, "minSize": 28, "required": true },
+        "conseil2_texte": { "maxChars": 65, "maxLines": 1, "size": 25, "minSize": 20, "required": true },
+        "conseil3_titre": { "maxChars": 30, "maxLines": 1, "size": 35, "minSize": 28, "required": true },
+        "conseil3_texte": { "maxChars": 65, "maxLines": 1, "size": 25, "minSize": 20, "required": true }
+      }
+    },
+    "tera-chiffremercredi-s4": {
+      "fields": {
+        "edition_label": { "maxChars": 22, "maxLines": 1, "size": 24, "minSize": 20, "required": true, "static": true },
+        "surtitre": { "maxChars": 35, "maxLines": 1, "size": 35, "minSize": 28, "required": true },
+        "titre": { "maxChars": 50, "maxLines": 2, "size": 58, "minSize": 47, "required": true },
+        "detail1": { "maxChars": 45, "maxLines": 1, "size": 30, "minSize": 24, "required": true },
+        "detail2": { "maxChars": 45, "maxLines": 1, "size": 30, "minSize": 24, "required": true },
+        "detail3": { "maxChars": 45, "maxLines": 1, "size": 30, "minSize": 24, "required": true },
+        "conclusion": { "maxChars": 55, "maxLines": 1, "size": 30, "minSize": 24, "required": true }
+      }
+    },
+    "tera-chiffremercredi-s5": {
+      "fields": {
+        "edition_label": { "maxChars": 22, "maxLines": 1, "size": 24, "minSize": 20, "required": true, "static": true },
+        "badge": { "maxChars": 14, "maxLines": 1, "size": 30, "minSize": 24, "required": true },
+        "titre": { "maxChars": 60, "maxLines": 3, "size": 68, "minSize": 55, "required": true },
+        "texte": { "maxChars": 115, "maxLines": 2, "size": 25, "minSize": 20, "required": true },
+        "cta_question": { "maxChars": 28, "maxLines": 1, "size": 25, "minSize": 20, "required": true },
+        "cta_action": { "maxChars": 14, "maxLines": 1, "size": 25, "minSize": 20, "required": true }
+      }
+    },
+    "tera-ancragevendredi-a": {
+      "fields": {
+        "citation_accent+citation_main": { "maxChars": 75, "maxLines": 3, "size": 65, "minSize": 52, "required": true }
+      }
+    },
+    "tera-ancragevendredi-b": {
+      "fields": {
+        "headline": { "maxChars": 90, "maxLines": 3, "size": 50, "minSize": 40, "required": true },
+        "body": { "maxChars": 125, "maxLines": 2, "size": 25, "minSize": 20, "required": true }
+      }
+    }
+  }
+}
