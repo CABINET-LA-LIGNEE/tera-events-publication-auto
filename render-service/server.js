@@ -63,8 +63,8 @@ function renderNode(n, data) {
   if (n.type === "text") {
     const text = resolveText(n, data);
     if (!text) return "";
-    // Les paragraphes utiles doivent rester lisibles lorsque le visuel est ramen� � la largeur
-    // d'un t�l�phone. Les titres, badges et mentions de navigation conservent leur hi�rarchie.
+    // Les paragraphes utiles doivent rester lisibles lorsque le visuel est ramené à la largeur
+    // d'un téléphone. Les titres, badges et mentions de navigation conservent leur hiérarchie.
     const isReadableBody = /^(texte|insight|body|moment\d+_texte|conseil\d+_texte)$/i.test(n.data || "");
     const mobileMinSize = isReadableBody ? (n.mobileMinSize || 30) : 0;
     const renderedSize = Math.max(n.size, mobileMinSize);

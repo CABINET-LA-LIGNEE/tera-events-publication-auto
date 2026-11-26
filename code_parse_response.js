@@ -52,7 +52,7 @@ if (typeof parsed.caption === "string") {
   }
 
   const contactBlock = "WhatsApp ou appel : +225 05 66 22 10 10\nE-mail : reservations@tera.events";
-  const locationBlock = "Localisation : � l'int�rieur du Centre Commercial TERA, 7e Tranche, Deux-Plateaux.\nVisites uniquement sur rendez-vous.";
+  const locationBlock = "Localisation : à l'intérieur du Centre Commercial TERA, 7e Tranche, Deux-Plateaux.\nVisites uniquement sur rendez-vous.";
   if (!parsed.caption.includes("+225 05 66 22 10 10")) {
     parsed.caption = `${parsed.caption}\n\n${contactBlock}`;
   }

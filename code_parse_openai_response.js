@@ -1,6 +1,6 @@
 // n8n node mode: runOnceForEachItem.
 // Le nom du nœud conserve la mention historique Claude, mais la réponse vient de l'API OpenAI.
-const source = $("Préparer le Prompt Claude").item.json;
+const source = $("Préparer le Prompt OpenAI").item.json;
 const output = Array.isArray($json.output) ? $json.output : [];
 const raw = $json.output_text || output
   .flatMap(item => Array.isArray(item.content) ? item.content : [])

@@ -1,5 +1,5 @@
 // Réassocie la réponse image au contenu éditorial avant le rendu Figma.
-const source = $("Parser Réponse Claude").item.json;
+const source = $("Parser Réponse OpenAI").item.json;
 
 // Le Chiffre du mercredi est un carrousel 100 % graphique. Même si une réponse image existe en
 // amont, elle ne doit jamais être transmise aux cinq gabarits de cette série.

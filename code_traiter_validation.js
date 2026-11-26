@@ -1,8 +1,8 @@
-// "Traiter la Validation Hebdomadaire" — répartit les décisions du formulaire de validation
+// "Contrôler Accords Texte + Visuels" — répartit les décisions du formulaire de validation
 // (une ligne Valider/Modifier/Refuser + commentaire par créneau) vers les branches de routage.
 
 const formData = $("Envoyer Pack de Validation").item.json.data;
-const slots = $("Préparer Pack Hebdomadaire").item.json.slots;
+const slots = $("Préparer Pack Figma + Double Validation").item.json.slots;
 const pilierConfig = $("Préparer les 3 publications").all().map(i => i.json);
 
 const results = [];

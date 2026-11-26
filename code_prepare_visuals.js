@@ -66,19 +66,19 @@ function buildVisualRequests(d) {
   const backgroundImages = Array.isArray(d.background_images) ? d.background_images : [];
 
   // La grande valeur de la slide 2 doit rester aussi courte que dans le gabarit Figma.
-  // Si une phrase a �t� produite, reprendre le chiffre et l'unit� de la couverture.
+  // Si une phrase a été produite, reprendre le chiffre et l'unité de la couverture.
   if (isChiffreDuMercredi && slides[1] && String(slides[1].statistique || "").length > 14) {
     const chiffre = String(slides[0]?.chiffre || "").trim();
     const unite = String(slides[0]?.unite || "").trim();
     slides[1] = { ...slides[1], statistique: [chiffre, unite].filter(Boolean).join(" ") };
   }
 
-  // Les formulations interrogatives doivent toujours porter leur ponctuation, m�me si le
-  // mod�le l'a omise. Cette normalisation s'applique au titre et aux trois questions de la slide 3.
+  // Les formulations interrogatives doivent toujours porter leur ponctuation, même si le
+  // modèle l'a omise. Cette normalisation s'applique au titre et aux trois questions de la slide 3.
   if (isChiffreDuMercredi && slides[2]) {
     const withQuestionMark = (value) => {
       const text = String(value || "").trim();
-      if (!/^(pourquoi|comment|qui|que|quel|quelle|quels|quelles|quand|o�|combien)\b/i.test(text)) return text;
+      if (!/^(pourquoi|comment|qui|que|quel|quelle|quels|quelles|quand|où|combien)(?![\p{L}\p{N}_])/iu.test(text)) return text;
       return text.replace(/[.!?…]+$/u, "").trim() + " ?";
     };
     slides[2] = {

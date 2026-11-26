@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "scripts": {
+    "check:encoding": "node scripts/check-encoding.js",
+    "build": "node build_n8n_workflow.js",
+    "test:nodes": "node --test \"test/**/*.test.js\"",
+    "test:render": "npm --prefix render-service test",
+    "check": "npm run check:encoding && npm run build && npm run test:nodes && npm run test:render"
+  }
+}
