@@ -1,4 +1,4 @@
-// "Préparer Pack Hebdomadaire" — regroupe les publications des 3 créneaux de la semaine (lundi,
+// "Préparer Pack Figma + Double Validation" — regroupe les publications des 3 créneaux de la semaine (lundi,
 // mercredi, vendredi) et construit le formulaire de validation groupé, sur le modèle éprouvé de
 // La Lignée (code_hebdo_prepare_pack.js) : un seul geste de validation le dimanche plutôt que 3
 // validations séparées dans la semaine.

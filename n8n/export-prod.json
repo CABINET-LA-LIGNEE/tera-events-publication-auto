@@ -1,0 +1,790 @@
+{
+  "name": "TERA EVENTS - Publication Hebdomadaire",
+  "nodes": [
+    {
+      "name": "Déclencheur Hebdomadaire (Dimanche)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        -160
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                0
+              ],
+              "triggerAtHour": 18
+            }
+          ]
+        }
+      },
+      "id": "b2a91102-150c-4cee-8cda-aaaf5f449235"
+    },
+    {
+      "name": "Déclenchement Manuel",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {},
+      "id": "7ac9442f-b981-4626-b5c7-6c9ecf524cea"
+    },
+    {
+      "name": "Préparer les 3 publications",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// \"Préparer les 3 publications\" — détermine, pour la semaine en cours, la famille/variante de\n// gabarit à utiliser sur chacun des 3 créneaux pilotés (lundi, mercredi, vendredi), avec rotation\n// hebdomadaire par famille pour respecter \"ça doit varier selon le sujet\" (au lieu d'une matrice\n// unique lundi/vendredi comme envisagé initialement, voir DOCUMENTATION.md).\n//\n// Chaque créneau a un angle fixe (lundi = Le Déclic, mercredi = Savoir-Faire, vendredi =\n// L'Ancrage) mais la variante utilisée à l'intérieur de cet angle tourne semaine après semaine,\n// parmi les seules variantes déjà dessinées dans Figma (le pool s'enrichit au fur et à mesure que\n// de nouveaux gabarits sont maquettés).\n\nfunction nextWeekday(targetIsoWeekday, hour) {\n  const now = new Date();\n  const currentIso = now.getUTCDay() === 0 ? 7 : now.getUTCDay();\n  let diff = targetIsoWeekday - currentIso;\n  if (diff <= 0) diff += 7;\n  const result = new Date(now);\n  result.setUTCDate(now.getUTCDate() + diff);\n  result.setUTCHours(hour, 0, 0, 0);\n  return result.toISOString();\n}\n\n// Pools de variantes disponibles par famille — n'y figurent que les gabarits déjà dessinés et\n// câblés dans render-service/layouts.js. Ajouter une entrée ici dès qu'une nouvelle variante\n// (Décoration, Salle, Savoir-Faire Traiteur...) est maquettée et intégrée.\nconst POOLS = {\n  declic: [\"eventplanning\", \"traiteur\"],\n  savoirfaire: [\"generique\", \"chiffre\", \"traiteur\"],\n  ancrage: [\"a\", \"b\"]\n};\n\nconst SLOTS = [\n  { jour: \"Lundi\", weekday: 1, famille: \"declic\" },\n  { jour: \"Mercredi\", weekday: 3, famille: \"savoirfaire\" },\n  { jour: \"Vendredi\", weekday: 5, famille: \"ancrage\" }\n];\n\n// Transition de reprise : le lundi 2 novembre est déjà programmé dans Buffer par le pack validé\n// le 28 octobre. Lors de l'exécution du dimanche 1er novembre, ne générer que mercredi et\n// vendredi afin d'éviter un doublon. Dès le dimanche suivant, les trois créneaux habituels\n// reprennent automatiquement.\nconst todayUtc = new Date().toISOString().slice(0, 10);\nconst activeSlots = todayUtc === \"2026-11-01\"\n  ? SLOTS.filter(slot => slot.jour !== \"Lundi\")\n  : SLOTS;\n\n// Données statiques du workflow n8n : un index de rotation par famille, qui persiste d'une\n// exécution hebdomadaire à l'autre (équivalent de $getWorkflowStaticData('global') dans un nœud\n// Code n8n réel — représenté ici comme un objet passé/retourné pour rester testable hors n8n).\nconst state = $getWorkflowStaticData(\"global\");\nif (!state.rotation) state.rotation = { declic: 0, savoirfaire: 0, ancrage: 0 };\n\nconst items = activeSlots.map(slot => {\n  const pool = POOLS[slot.famille];\n  const idx = state.rotation[slot.famille] % pool.length;\n  const variante = pool[idx];\n  state.rotation[slot.famille] = idx + 1;\n  return {\n    json: {\n      jour: slot.jour,\n      famille: slot.famille,\n      variante,\n      attempt: 1,\n      modification_feedback: \"\",\n      target_due_at: nextWeekday(slot.weekday, 8)\n    }\n  };\n});\n\nreturn items;\n"
+      },
+      "id": "cdbdf5d9-2c8b-4fd7-ad5c-caf650ddd97b"
+    },
+    {
+      "name": "Préparer le Prompt OpenAI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// \"Préparer le Prompt OpenAI\" (mode n8n : runOnceForEachItem)\n// Construit le system prompt + le schéma JSON attendu pour le créneau du jour (jour / famille /\n// variante, déterminés par code_prepare_pilliers.js), à partir de la charte éditoriale et du\n// brief créa validés avec le cabinet.\n\nconst d = $json;\nconst attempt = d.attempt || 1;\nconst isRetry = attempt > 1;\nconst CATALOGUE_TRAITEUR = {\n  \"version\": \"Saison 26\",\n  \"currency\": \"F CFA\",\n  \"minimum_guests\": 30,\n  \"publication_rules\": [\n    \"Présenter chaque tarif comme un tarif d'une formule TERA EVENTS.\",\n    \"Ne jamais présenter ces montants comme des prix moyens du marché.\",\n    \"Préciser que les prix et les éléments des menus restent susceptibles d'évoluer jusqu'à la signature de la commande.\",\n    \"Ne jamais citer le nom ou le prénom d'un membre de l'équipe.\"\n  ],\n  \"cocktails_dinatoires\": {\n    \"service\": \"Serveurs inclus\",\n    \"soft_drinks_option\": {\n      \"price_per_person\": 3500,\n      \"includes\": [\"eau minérale\", \"jus naturels\", \"sodas\", \"bières\"]\n    },\n    \"formulas\": [\n      {\n        \"name\": \"Découverte\",\n        \"choices_per_person\": \"8 à 10\",\n        \"composition\": {\"canapes\": \"5 à 6 choix\", \"sandwichs_burgers\": \"1 à 2 choix\", \"desserts\": \"1 à 2 choix\"},\n        \"prices_per_person\": {\"30_to_100\": 10500, \"101_to_200\": 9975, \"over_200\": 9450},\n        \"examples\": [\"pastels poisson ou viande\", \"nems viande ou poulet\", \"quiches\", \"pizzas\", \"mini burgers\", \"déguê\", \"brochettes de fruits\"]\n      },\n      {\n        \"name\": \"Événement\",\n        \"choices_per_person\": \"10 à 12\",\n        \"composition\": {\"canapes\": \"3 à 5 choix\", \"grillades\": \"2 choix\", \"sandwichs_burgers\": \"3 choix\", \"desserts\": \"2 choix\"},\n        \"prices_per_person\": {\"30_to_100\": 15500, \"101_to_200\": 14725, \"over_200\": 13950},\n        \"examples\": [\"quiches\", \"pizzas\", \"samossas\", \"ailerons panés\", \"brochettes de poulet, mérou ou filet de bœuf\", \"mini burgers\", \"crème brûlée\"]\n      },\n      {\n        \"name\": \"Prestige\",\n        \"choices_per_person\": \"12 à 15\",\n        \"composition\": {\"canapes\": \"4 à 6 choix\", \"grillades\": \"2 choix\", \"sandwichs_burgers\": \"2 à 3 choix\", \"verrines\": \"2 choix dont 1 premium maximum\", \"desserts\": \"2 choix dont 1 premium maximum\"},\n        \"prices_per_person\": {\"30_to_100\": 27000, \"101_to_200\": 25650, \"over_200\": 24300},\n        \"examples\": [\"brochette de gambas\", \"toast saumon\", \"bao poulet crispy\", \"avocat crevette\", \"verrine exotique mangue\", \"tarte citron\", \"panna cotta passion\"]\n      }\n    ]\n  },\n  \"repas_assis\": {\n    \"service\": \"Serveurs et soft drinks inclus\",\n    \"soft_drinks\": [\"eau minérale\", \"jus naturels\", \"sodas\"],\n    \"buffet_formulas\": [\n      {\n        \"name\": \"Rapide\",\n        \"composition\": {\"aperitifs\": 2, \"entrees\": 2, \"plats_chauds\": 2, \"garnitures\": 2},\n        \"prices_per_person\": {\"30_to_100\": 19000, \"101_to_200\": 18050, \"over_200\": 17100}\n      },\n      {\n        \"name\": \"L'Essentiel\",\n        \"composition\": {\"aperitifs\": 4, \"entrees\": 2, \"plats_chauds\": 3, \"garnitures\": 3, \"desserts\": 1},\n        \"prices_per_person\": {\"30_to_100\": 25000, \"101_to_200\": 23750, \"over_200\": 22500}\n      },\n      {\n        \"name\": \"Prestige\",\n        \"composition\": {\"aperitifs\": 4, \"entrees\": 2, \"plats_chauds\": 4, \"garnitures\": 4, \"desserts\": 2},\n        \"prices_per_person\": {\"30_to_100\": 31000, \"101_to_200\": 29450, \"over_200\": 27900}\n      }\n    ],\n    \"gala_formulas\": [\n      {\n        \"name\": \"Éclair\",\n        \"composition\": {\"entrees\": 1, \"plats_chauds\": 2, \"garnitures\": 2},\n        \"prices_per_person\": {\"30_to_100\": 25000, \"101_to_200\": 23750, \"over_200\": 22500}\n      },\n      {\n        \"name\": \"L'Essentiel\",\n        \"composition\": {\"aperitifs\": 4, \"entrees\": 1, \"plats_chauds\": 2, \"garnitures\": 2, \"desserts\": 1},\n        \"prices_per_person\": {\"30_to_100\": 35000, \"101_to_200\": 33250, \"over_200\": 31500}\n      },\n      {\n        \"name\": \"Prestige\",\n        \"composition\": {\"aperitifs\": 6, \"entrees\": 2, \"plats_chauds\": 3, \"garnitures\": 3, \"dessert_signature\": 1},\n        \"prices_per_person\": {\"30_to_100\": 50000, \"101_to_200\": 47500, \"over_200\": 45000}\n      }\n    ],\n    \"menu_examples\": {\n      \"local_dishes\": [\"tchiep poulet ou poisson\", \"yassa poulet ou poisson\", \"attiéké et kedjénou de poulet\", \"placali sauce kôpè\", \"foutou sauce graine\", \"alloco\", \"claclo\", \"choukouya\"],\n      \"international_dishes\": [\"bœuf bourguignon\", \"couscous marocain\", \"tagliatelles à la crème\", \"filet de bœuf en croûte\", \"magret de canard\", \"ballotine de mérou\"],\n      \"desserts\": [\"brochettes de fruits\", \"crème brûlée\", \"flan coco\", \"déguê\", \"panna cotta\", \"moelleux au chocolat\"]\n    }\n  },\n  \"pauses_cafe\": {\n    \"morning\": [\n      {\n        \"name\": \"Express\",\n        \"price_per_person\": 3500,\n        \"composition\": {\"pastries\": \"2 choix\", \"bakery\": \"pain, beurre et confiture\", \"hot_drink\": \"1 choix\", \"cold_drink\": \"1 choix\", \"water\": true}\n      },\n      {\n        \"name\": \"Express +\",\n        \"price_per_person\": 5000,\n        \"composition\": {\"pastries\": \"3 choix\", \"bakery\": \"pain, beurre et confiture\", \"dessert\": \"1 choix\", \"hot_drinks\": \"2 choix\", \"cold_drink\": \"1 choix\", \"water\": true}\n      }\n    ],\n    \"afternoon\": [\n      {\n        \"name\": \"Express\",\n        \"price_per_person\": 3500,\n        \"composition\": {\"canapes\": \"3 choix\", \"hot_drink\": \"1 choix\", \"cold_drink\": \"1 choix\", \"water\": true}\n      },\n      {\n        \"name\": \"Express +\",\n        \"price_per_person\": 5000,\n        \"composition\": {\"canapes\": \"4 choix\", \"dessert\": \"1 choix\", \"hot_drinks\": \"2 choix\", \"cold_drink\": \"1 choix\", \"water\": true}\n      }\n    ],\n    \"drink_choices\": {\n      \"hot\": [\"thé\", \"café\", \"chocolat chaud\"],\n      \"cold\": [\"bissap\", \"gingembre\", \"ananas\", \"orange\", \"cocktail de fruits\"]\n    }\n  },\n  \"commercial_conditions\": {\n    \"booking_deposit_percent\": 60,\n    \"booking_deadline_business_days\": 15,\n    \"cash_balance_deadline_business_days\": 5,\n    \"cheque_balance_deadline_business_days\": 7,\n    \"deposit_refundable_on_cancellation\": false,\n    \"dietary_requests\": [\"sans gluten\", \"sans lactose\", \"végétalien\"],\n    \"custom_menu_available\": true\n  }\n};\nconst FAITS_SITE_TERA = {\n  \"source\": \"https://www.tera.events\",\n  \"verified_on\": \"2026-09-02\",\n  \"brand\": {\n    \"name\": \"TERA EVENTS\",\n    \"positioning\": \"Agence d'event planning à Abidjan pour les événements corporate et privés\",\n    \"location\": \"Centre Commercial TERA, Cocody 2 Plateaux, 7ème tranche, Abidjan, Côte d'Ivoire\",\n    \"phone_primary\": \"+225 05 66 22 10 10\",\n    \"phone_secondary\": \"+225 07 06 83 99 57\",\n    \"email\": \"reservations@tera.events\",\n    \"publication_contact\": {\n      \"phone\": \"+225 05 66 22 10 10\",\n      \"phone_channels\": [\"WhatsApp\", \"appel\"],\n      \"email\": \"reservations@tera.events\"\n    }\n  },\n  \"proof_points\": {\n    \"years_experience\": \"4+\",\n    \"events_received_and_organized\": \"100+\",\n    \"displayed_client_satisfaction\": \"100%\"\n  },\n  \"services\": [\n    \"event planning\",\n    \"coordination complète\",\n    \"coordination partielle\",\n    \"coordination Jour J\",\n    \"décoration et scénographie sur mesure\",\n    \"traiteur et bar\",\n    \"communication événementielle\",\n    \"couverture photo et vidéo\",\n    \"sonorisation et éclairage\",\n    \"animations et hôtesses\",\n    \"location de la Salle TERA\"\n  ],\n  \"event_planning\": {\n    \"locations\": [\"Salle TERA\", \"bureaux du client\", \"hôtel\", \"restaurant\", \"jardin\", \"autre lieu choisi à Abidjan et environs\"],\n    \"coordination_complete\": [\"recherche et sélection du lieu\", \"concept et scénographie\", \"sélection et coordination des prestataires\", \"suivi du budget et du planning\", \"gestion complète du Jour J\"],\n    \"coordination_partielle\": [\"audit de l'organisation existante\", \"conseil et optimisation\", \"coordination des prestataires choisis\", \"supervision de la mise en place\", \"gestion du Jour J\"],\n    \"coordination_jour_j\": [\"prise en main du dossier à J-15\", \"confirmation des prestataires\", \"gestion du timing\", \"résolution des imprévus\"],\n    \"quote_response_time\": \"24 à 48 heures\"\n  },\n  \"corporate\": {\n    \"audiences\": [\"entreprises\", \"PME\", \"startups\", \"incubateurs\", \"ONG\", \"ambassades\", \"institutions\", \"agences de communication\", \"consultants\", \"coachs professionnels\"],\n    \"event_types\": [\"séminaires\", \"formations\", \"conférences\", \"panels\", \"conférences de presse\", \"lancements de produit\", \"soirées d'entreprise\", \"cocktails dînatoires\", \"galas\", \"afterworks\", \"team buildings\", \"journées RH\", \"rencontres B2B\", \"networking\"],\n    \"business_day\": {\n      \"minimum_participants\": 30,\n      \"akwaba_half_day_price_per_person\": 37500,\n      \"nanan_full_day_price_per_person\": 45000\n    }\n  },\n  \"private_events\": [\"mariages\", \"fiançailles\", \"anniversaires\", \"baptêmes\", \"baby showers\", \"soirées privées\", \"galas\"],\n  \"room\": {\n    \"name\": \"Salle TERA\",\n    \"features\": [\"climatisation\", \"mobilier\", \"espace bar\", \"écran de projection\", \"sonorisation\", \"Wi-Fi\", \"groupe électrogène\", \"nettoyage avant et après\", \"parking sécurisé\"],\n    \"capacity_publication_rule\": \"Les pages du site affichent des capacités différentes selon la configuration. Ne publier aucun chiffre de capacité sans validation humaine explicite.\"\n  },\n  \"publication_rules\": [\n    \"La marque et l'entreprise doivent toujours être appelées TERA EVENTS.\",\n    \"Centre Commercial TERA ne peut être mentionné que pour indiquer explicitement la localisation de TERA EVENTS.\",\n    \"Ne jamais citer le nom ou le prénom d'un membre de l'équipe.\",\n    \"Parler de notre équipe, nos chefs, nos serveurs ou notre équipe de coordination.\",\n    \"Ne jamais reprendre les noms présents dans les témoignages.\",\n    \"Chaque légende doit se terminer par le contact WhatsApp ou appel +225 05 66 22 10 10 et l'adresse reservations@tera.events.\",\n    \"Ne pas inventer de prix, délai, capacité, équipement ou prestation.\",\n    \"Pour le traiteur, le catalogue PDF structuré est prioritaire sur le site.\"\n  ]\n};\n\n// ---------------------------------------------------------------------------------------------\n// Faits de marque vérifiés (site tera.events, réseaux, échanges avec le cabinet) — jamais à\n// réinventer, jamais à approximer. Toute donnée chiffrée utilisée dans un texte doit venir d'ici.\n// ---------------------------------------------------------------------------------------------\nconst FAITS_TERA = `\nLes informations générales autorisées proviennent de la base officielle du site TERA EVENTS.\nLes seules formules et données traiteur autorisées proviennent du catalogue structuré issu des PDF.\nRespecte exactement les noms, paliers de convives, compositions, inclusions, délais et tarifs.\n\nBASE OFFICIELLE DU SITE TERA EVENTS :\n${JSON.stringify(FAITS_SITE_TERA, null, 2)}\n`.trim();\n\n// ---------------------------------------------------------------------------------------------\n// Charte éditoriale — deux règles absolues, non négociables, rappelées par le cabinet à plusieurs\n// reprises. Elles priment sur toute autre considération de style.\n// ---------------------------------------------------------------------------------------------\nconst CHARTE = `\nTu es la personne qui rédige pour TERA EVENTS sur les réseaux sociaux : quelqu'un qui connaît le\nmétier de l'intérieur (organisation d'événements à Abidjan), pas un rédacteur générique.\n\nRÈGLE ABSOLUE N°1 — ÉCRITURE HUMAINE, AUCUNE TRACE D'IA :\n- Interdiction absolue d'utiliser un tiret cadratin ou demi-cadratin (\"—\" ou \"–\") comme\n  ponctuation stylistique au milieu d'une phrase : c'est immédiatement reconnaissable comme un\n  texte généré par une IA. Utilise une virgule, un point, des parenthèses, ou reformule en deux\n  phrases courtes. Le trait d'union normal dans un mot composé reste autorisé.\n- Interdiction des tics de rédaction IA reconnaissables entre mille : \"plongeons dans\", \"dans un\n  monde où\", \"il est essentiel/crucial de\", \"n'hésitez pas à\", \"que vous soyez X ou Y\", les\n  triplets parfaitement symétriques (\"rapide, fiable et élégant\"), les superlatifs creux utilisés\n  par réflexe plutôt que pour un fait précis (\"unique\", \"exceptionnel\", \"incroyable\").\n- Ne jamais résumer ou reformuler ce qu'on vient de dire en fin de texte (\"en résumé\", \"bref\",\n  \"vous l'aurez compris\").\n- Varie réellement la longueur et la construction des phrases. Une phrase courte peut suivre une\n  phrase longue. Une idée n'a pas besoin d'être immédiatement rééquilibrée par une proposition\n  symétrique.\n- Avant de répondre, relis-toi mentalement : le texte doit sonner comme celui d'une personne qui\n  connaît les services TERA EVENTS. Évite les phrases génériques et les automatismes publicitaires.\n\nRÈGLE ABSOLUE N°2 — ORTHOGRAPHE ET GRAMMAIRE IRRÉPROCHABLES :\n- Français impeccable : accords en genre et en nombre, conjugaisons correctes, ponctuation\n  française correcte (espace avant : ; ! ? et après «, avant »).\n- Aucune faute n'est tolérée, même mineure. Relis-toi avant de répondre.\n\nRIGUEUR FACTUELLE :\n- N'avance jamais un chiffre, un prix ou un délai qui ne figure pas explicitement dans les faits\n  TERA ci-dessous. Si tu as besoin d'un chiffre et qu'aucun ne correspond dans les faits fournis,\n  reformule sans chiffre plutôt que d'en inventer un.\n- Tout prix traiteur doit être clairement présenté comme le tarif d'une formule TERA EVENTS, et\n  non comme un prix moyen du marché ou une recommandation générale.\n- Ne cite jamais le prénom, le nom ou la fonction nominative d'un membre de l'équipe. Utilise\n  uniquement « notre équipe », « nos chefs », « nos serveurs » ou « notre équipe de coordination ».\n- La marque et l'entreprise s'appellent toujours « TERA EVENTS ». N'utilise jamais « Centre\n  Commercial TERA » pour désigner l'entreprise, l'équipe ou le service traiteur. Cette expression\n  est réservée exclusivement à une indication de localisation explicite.\n- Ne répète pas « Abidjan », « Cocody », « Deux-Plateaux » ou un quartier dans le corps du texte.\n  La localisation complète est ajoutée automatiquement après les contacts. Une référence locale\n  n'est autorisée dans le corps que si elle apporte une information indispensable au sujet.\n\nSTRUCTURE DES LÉGENDES :\n- Même courte, chaque légende doit être rédigée en 2 à 4 paragraphes aérés, séparés par une ligne\n  vide. Pas de bloc compact ni de suite de phrases posées les unes à la suite des autres.\n- Le premier paragraphe donne envie de poursuivre. Le deuxième apporte une information concrète.\n- Le dernier conduit naturellement vers une demande de devis, une question ou une prise de contact.\n- Les coordonnées exactes sont ajoutées automatiquement après la rédaction. Ne les invente pas et\n  ne les reformule pas dans le corps de la légende.\n- Les transitions doivent sembler naturelles et conversationnelles, sans titres artificiels tels\n  que « Introduction », « Conseil » ou « Conclusion ».\n\nTON DE MARQUE :\n- Chaleureux, précis, sensoriel (matières, lumière, ambiance) plutôt que des superlatifs vides.\n- Toujours une raison concrète d'écrire à la fin du texte, jamais un simple \"suivez-nous\".\n- Utilise les saisons ivoiriennes, les spécialités locales et le F CFA seulement quand le sujet le\n  justifie. Ne force jamais un quartier ou le mot « Abidjan » dans une accroche.\n- On évite de cacher le prix par réflexe : la transparence rassure plus qu'elle ne dévalorise.\n\nFAITS TERA EVENTS (seule source pour tout chiffre, prix, délai ou nom cité) :\n${FAITS_TERA}\n\nCATALOGUE TRAITEUR TERA EVENTS :\n${JSON.stringify(CATALOGUE_TRAITEUR, null, 2)}\n`.trim();\n\n// ---------------------------------------------------------------------------------------------\n// Schémas par famille × variante. Les champs listés ici sont exactement ceux attendus par\n// render-service/layouts.js — ne pas en ajouter ni en renommer sans mettre à jour ce fichier ET\n// layouts.js en parallèle. Les éléments de marque fixes (tags de catégorie, coordonnées, CTA\n// visuel statique) ne sont PAS demandés à Claude : ils sont injectés tels quels au moment du\n// rendu (voir code_prepare_visuals.js), pour ne jamais risquer une erreur sur une donnée de\n// marque.\n// ---------------------------------------------------------------------------------------------\n\nconst SCHEMAS = {\n  \"declic:traiteur\": {\n    angle: \"Le Déclic — Traiteur : lever une objection ou une question fréquente sur le traiteur (prix, format, personnalisation), avec la vraie réponse chiffrée.\",\n    schema: `{\n  \"slides\": [{\n    \"accroche\": \"Amorce manuscrite courte (4-6 mots), ex. 'Ce que ça inclut vraiment'\",\n    \"titre\": \"2-3 mots, le format concerné : 'En cocktail' ou 'En buffet' ou 'En dîner assis'\",\n    \"texte\": \"1 phrase, ce que ce format inclut concrètement (18-25 mots)\",\n    \"prix\": \"Le prix exact correspondant, tiré des faits TERA, format '10 500' ou '19 000' (sans F CFA, juste le nombre)\"\n  }],\n  \"caption\": \"Légende complète du post (300-450 caractères, 2-3 paragraphes courts), qui développe le sujet et se termine par une invitation concrète à écrire\",\n  \"hashtags\": [\"5 à 8 hashtags\", \"mélange marque/local/expertise\"]\n}`\n  },\n\n  \"declic:eventplanning\": {\n    angle: \"Le Déclic — Event Planning : un carrousel de 5 slides qui lève une objection ou explique une formule de coordination, avec une couverture forte et une conclusion qui invite à demander un devis.\",\n    schema: `{\n  \"slides\": [\n    { \"titre_normal\": \"Première partie du titre de couverture (2-4 mots)\", \"titre_accent\": \"Partie accentuée du titre (1-3 mots)\" },\n    { \"tag_formule\": \"2-4 mots MAJUSCULES\", \"titre_normal\": \"2-4 mots\", \"titre_accent\": \"1-3 mots\", \"texte\": \"1 phrase courte, 10-15 mots maximum\" },\n    { \"tag_formule\": \"2-4 mots MAJUSCULES\", \"titre_normal\": \"2-4 mots\", \"titre_accent\": \"1-3 mots\", \"texte\": \"1 phrase courte, 10-15 mots maximum\" },\n    { \"tag_formule\": \"2-4 mots MAJUSCULES\", \"titre_normal\": \"2-4 mots\", \"titre_accent\": \"1-3 mots\", \"texte\": \"1 phrase courte, 10-15 mots maximum\" },\n    { \"tag_formule\": \"2-4 mots MAJUSCULES\", \"titre_normal\": \"2-4 mots\", \"titre_accent\": \"1-3 mots\", \"texte\": \"1 phrase courte, 10-15 mots maximum\", \"cta_label\": \"3-5 mots MAJUSCULES, ex. 'DEMANDEZ VOTRE DEVIS'\" }\n  ],\n  \"caption\": \"Légende complète du post (300-450 caractères), qui pose le sujet du carrousel et se termine par une invitation concrète\",\n  \"hashtags\": [\"5 à 8 hashtags\", \"mélange marque/local/expertise\"]\n}`\n  },\n\n  \"savoirfaire:generique\": {\n    angle: \"Le conseil du mercredi : un carrousel pratique de 4 slides, un conseil concret applicable par n'importe quel client TERA (traiteur, décoration ou event planning), pas une leçon abstraite.\",\n    schema: `{\n  \"slides\": [\n    { \"repere\": \"Court repère numéroté, ex. '01. L'arrivée'\", \"titre\": \"Titre de 5-8 mots, 55 caractères maximum\", \"texte\": \"1 phrase concrète, 10-14 mots, 90 caractères maximum\" },\n    { \"repere\": \"...\", \"titre\": \"...\", \"texte\": \"...\" },\n    { \"repere\": \"...\", \"titre\": \"...\", \"texte\": \"...\" },\n    { \"repere\": \"Repère de conclusion\", \"titre\": \"Titre de 5-8 mots, 55 caractères maximum\", \"conclusion\": \"1 phrase courte, 10-14 mots maximum\", \"cta_question\": \"Une question courte (4-7 mots)\", \"cta_action\": \"2-3 mots MAJUSCULES, ex. 'ON EN PARLE'\" }\n  ],\n  \"caption\": \"Légende complète du post (300-450 caractères)\",\n  \"hashtags\": [\"5 à 8 hashtags\", \"mélange marque/local/expertise\"]\n}`\n  },\n\n  \"savoirfaire:chiffre\": {\n    angle: \"Le chiffre du mercredi : un carrousel fixe de 5 slides, toujours 100 % graphique et sans photo de fond, construit autour d'UN SEUL chiffre ou délai réel de TERA (jamais une statistique externe non vérifiée) : accroche chiffrée, développement, 3 principes numérotés, 3 points pratiques, conclusion + question.\",\n    schema: `{\n  \"slides\": [\n    { \"chiffre\": \"Le chiffre en gros caractères, ex. '48' (nombre seul, sans unité)\", \"unite\": \"L'unité en 1 mot, ex. 'heures'\", \"headline\": \"Ce que ce chiffre permet (8-12 mots)\", \"insight\": \"1 phrase qui explique pourquoi ça compte (12-20 mots)\" },\n    { \"surtitre\": \"3-5 mots MAJUSCULES\", \"statistique\": \"Reformulation courte du même chiffre ou d'un angle complémentaire\", \"cartouche\": \"2-4 mots, un label court\", \"titre\": \"Titre développé (8-14 mots)\", \"texte\": \"1-2 phrases (20-30 mots)\" },\n    { \"surtitre\": \"Une formule courte en 4-7 mots\", \"titre\": \"Titre (5-9 mots)\", \"conseil1_titre\": \"Question courte\", \"conseil1_texte\": \"1 principe concret (8-15 mots)\", \"conseil2_titre\": \"Question courte\", \"conseil2_texte\": \"1 principe concret (8-15 mots)\", \"conseil3_titre\": \"Question courte\", \"conseil3_texte\": \"1 principe concret (8-15 mots)\" },\n    { \"surtitre\": \"Une formule courte en 4-7 mots\", \"titre\": \"Titre (5-9 mots)\", \"detail1\": \"1 point pratique court (5-9 mots)\", \"detail2\": \"1 point pratique court (5-9 mots)\", \"detail3\": \"1 point pratique court (5-9 mots)\", \"conclusion\": \"1 phrase de clôture courte (6-10 mots)\" },\n    { \"badge\": \"1-2 mots\", \"titre\": \"Titre de conclusion (8-12 mots)\", \"texte\": \"1 phrase (15-25 mots)\", \"cta_question\": \"Question courte (3-6 mots)\", \"cta_action\": \"2-3 mots MAJUSCULES avec une flèche finale\" }\n  ],\n  \"caption\": \"Légende complète du post (300-450 caractères)\",\n  \"hashtags\": [\"5 à 8 hashtags\", \"mélange marque/local/expertise\"]\n}`\n  },\n  \"savoirfaire:traiteur\": {\n    angle: \"Le Savoir-Faire Traiteur : présenter clairement les différentes gammes TERA, leurs usages et les critères concrets pour choisir selon le format de l'événement.\",\n    schema: `{\n  \"slides\": [\n    { \"badge1\": \"4-6 mots, ex. 'Des gammes Découverte à Gala'\", \"badge2\": \"4-6 mots, ex. 'Comment choisir le bon menu'\", \"texte\": \"Phrase d'introduction courte et concrète (15-25 mots)\" },\n    { \"gamme_ligne1\": \"GAMME\", \"gamme_ligne2\": \"DÉCOUVERTE\", \"badge\": \"2-4 mots\", \"texte\": \"Description claire de la gamme (20-35 mots)\" },\n    { \"gamme_ligne1\": \"GAMME\", \"gamme_ligne2\": \"PRESTIGE\", \"badge\": \"2-4 mots\", \"texte\": \"Description claire de la gamme (20-35 mots)\" },\n    { \"gamme_ligne1\": \"GAMME\", \"gamme_ligne2\": \"GALA\", \"badge\": \"2-4 mots\", \"texte\": \"Description claire de la gamme (20-35 mots)\" },\n    { \"gamme_ligne1\": \"COMMENT\", \"gamme_ligne2\": \"CHOISIR ?\", \"badge\": \"2-4 mots\", \"texte\": \"Conseil de choix et invitation à demander un devis (20-35 mots)\" }\n  ],\n  \"caption\": \"Légende complète du post (300-450 caractères), concrète et orientée vers la demande de devis\",\n  \"hashtags\": [\"5 à 8 hashtags\", \"mélange marque/local/expertise\"]\n}`\n  },\n\n  \"ancrage:a\": {\n    angle: \"L'Ancrage du vendredi : une citation courte et marquante, ancrée dans la saison ou le calendrier ivoirien du moment (voir la ligne éditoriale pour le calendrier culturel), qui projette le lecteur dans son propre événement.\",\n    schema: `{\n  \"slides\": [{\n    \"citation_accent\": \"L’accroche saisonnière ou le moment clé en 2-5 mots, par exemple 'Rentrée corporate :'\",\n    \"citation_main\": \"La suite de la citation en 8-14 mots, concrète et directement liée à l’événement\"\n  }],\n  \"caption\": \"Légende complète du post (250-400 caractères)\",\n  \"hashtags\": [\"5 à 8 hashtags\", \"mélange marque/local/saisonnier\"]\n}`\n  },\n\n  \"ancrage:b\": {\n    angle: \"L'Ancrage du vendredi : un message plus direct que la citation, avec un vrai appel à l'action visible, toujours ancré dans la saison ou le calendrier ivoirien du moment.\",\n    schema: `{\n  \"slides\": [{\n    \"headline\": \"Titre fort de 6-10 mots, 65 caractères maximum\",\n    \"body\": \"1 phrase d'appui de 10-14 mots maximum\"\n  }],\n  \"caption\": \"Légende complète du post (250-400 caractères)\",\n  \"hashtags\": [\"5 à 8 hashtags\", \"mélange marque/local/saisonnier\"]\n}`\n  }\n};\n\nconst key = `${d.famille}:${d.variante}`;\nconst config = SCHEMAS[key];\nif (!config) {\n  throw new Error(`Aucun schéma défini pour famille=\"${d.famille}\" variante=\"${d.variante}\". Vérifie code_prepare_pilliers.js et SCHEMAS dans ce fichier.`);\n}\n\nconst retryNote = isRetry\n  ? ` Ceci est une nouvelle tentative (proposition n°${attempt}) : une première version n'a pas été validée par le cabinet${d.modification_feedback ? `, avec ce retour : \"${d.modification_feedback}\"` : \"\"}. Corrige en conséquence tout en respectant strictement la charte.`\n  : \"\";\n\nconst layoutRule = key === \"savoirfaire:chiffre\"\n  ? `\\nCONTRAINTES IMPERATIVES DU GABARIT : slide 2, statistique = nombre et unite uniquement, 14 caracteres maximum ; titre = 55 caracteres maximum ; texte = 120 caracteres maximum. Slide 3, titre = 55 caracteres maximum et chaque texte de conseil = 75 caracteres maximum. Toute formulation interrogative commencant par Pourquoi, Comment, Qui, Que, Quel, Quand, Ou ou Combien doit obligatoirement se terminer par un point d'interrogation. Slide 5, titre = 70 caracteres maximum. Ne depasse jamais ces limites.`\n  : \"\";\n\nconst variationRule = `\\nVARIATION OBLIGATOIRE : fais varier le sujet, l'accroche, les exemples et la formulation d'une semaine a l'autre. Ne recycle jamais une publication precedente.`;\n\nconst visualCopyRule = `\\nREGLE ABSOLUE POUR LES VISUELS : ecris COURT et accrocheur. Aucun champ de texte ne doit occuper plus de 3 lignes dans le gabarit. Un titre contient 8 mots maximum et 55 caracteres maximum, sauf limite plus courte du schema. Un texte secondaire contient 14 mots maximum et 90 caracteres maximum. Une seule idee par champ. Si le texte depasse, coupe l'idee et garde l'explication pour la legende. N'ajoute jamais Abidjan, Cocody ou un quartier pour donner artificiellement une couleur locale. Le visuel doit respirer et rester lisible sur un telephone.`;\n\nconst systemPrompt = `${CHARTE}\n\nAujourd'hui : ${d.jour}. Angle : ${config.angle}\n\nTu dois répondre UNIQUEMENT avec un objet JSON valide, sans texte avant ni après, sans balises\nmarkdown, respectant exactement ce schéma :\n${config.schema}${layoutRule}${variationRule}${visualCopyRule}\n\nRAPPEL : ta toute dernière réponse ne doit contenir STRICTEMENT RIEN d'autre que l'objet JSON. Le\npremier caractère de ta réponse doit être { et le dernier doit être }.`;\n\nconst userPrompt = `Rédige la publication du ${d.jour.toLowerCase()} pour TERA EVENTS, sur l'angle \"${config.angle}\".${retryNote} Choisis un sujet précis et concret, pas un thème générique.`;\n\nreturn {\n  json: {\n    ...d,\n    anthropic_request: {\n      model: \"claude-sonnet-5\",\n      max_tokens: 8000,\n      system: systemPrompt,\n      messages: [{ role: \"user\", content: userPrompt }]\n    }\n  }\n};\n",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "89c4743b-359f-47d9-9130-960016724a7a"
+    },
+    {
+      "name": "Générer le contenu (OpenAI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model:\"gpt-6.1-sol\",instructions:$json.anthropic_request.system,input:($json.anthropic_request.messages||[]).map(m=>({role:m.role,content:m.content})),max_output_tokens:6500,store:false}) }}",
+        "options": {
+          "timeout": 270000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "id": "73d5b599-990b-44b8-be1a-b85a68ff36fb",
+      "credentials": {
+        "openAiApi": {
+          "name": "OpenAI - TERA EVENTS"
+        }
+      }
+    },
+    {
+      "name": "Parser Réponse OpenAI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// n8n node mode: runOnceForEachItem.\n// Le nom du nœud conserve la mention historique Claude, mais la réponse vient de l'API OpenAI.\nconst source = $(\"Préparer le Prompt OpenAI\").item.json;\nconst output = Array.isArray($json.output) ? $json.output : [];\nconst raw = $json.output_text || output\n  .flatMap(item => Array.isArray(item.content) ? item.content : [])\n  .filter(content => content.type === \"output_text\" && typeof content.text === \"string\")\n  .map(content => content.text)\n  .join(\"\");\n\nfunction tryParse(text) {\n  if (!text) return undefined;\n  try {\n    return JSON.parse(text);\n  } catch {\n    return undefined;\n  }\n}\n\nlet parsed = tryParse(raw);\nif (parsed === undefined) {\n  const match = raw && raw.match(/\\{[\\s\\S]*\\}/);\n  parsed = match ? tryParse(match[0]) : undefined;\n}\nif (parsed === undefined) parsed = { error: \"Parsing JSON échoué\", raw: raw || \"Réponse OpenAI vide\" };\n\nconst publicationText = JSON.stringify(parsed);\nfor (const name of [\"Vanessa\", \"Eric\", \"Éric\"]) {\n  if (new RegExp(`\\\\b${name}\\\\b`, \"iu\").test(publicationText)) {\n    throw new Error(\"Le contenu généré cite un membre de l'équipe.\");\n  }\n}\n\nif (\n  /centre commercial tera/iu.test(publicationText) &&\n  !/localisation|situ[eé]e?|int[eé]rieur/iu.test(publicationText)\n) {\n  throw new Error(\"Centre Commercial TERA ne doit être cité que comme localisation.\");\n}\n\nif (typeof parsed.caption === \"string\") {\n  parsed.caption = parsed.caption.trim();\n  if (!/\\n\\s*\\n/u.test(parsed.caption)) {\n    const sentences = parsed.caption\n      .match(/[^.!?]+[.!?]+|[^.!?]+$/gu)\n      ?.map(sentence => sentence.trim())\n      .filter(Boolean) || [];\n    if (sentences.length >= 2) {\n      const middle = Math.ceil(sentences.length / 2);\n      parsed.caption = [\n        sentences.slice(0, middle).join(\" \"),\n        sentences.slice(middle).join(\" \")\n      ].filter(Boolean).join(\"\\n\\n\");\n    }\n  }\n\n  const contact = \"WhatsApp ou appel : +225 05 66 22 10 10\\nE-mail : reservations@tera.events\";\n  const location = \"Localisation : à l'intérieur du Centre Commercial TERA, 7e Tranche, Deux-Plateaux.\\nVisites uniquement sur rendez-vous.\";\n  if (!parsed.caption.includes(\"+225 05 66 22 10 10\")) parsed.caption += `\\n\\n${contact}`;\n  if (!parsed.caption.includes(\"Centre Commercial TERA\") || !/visites? uniquement sur rendez-vous/i.test(parsed.caption)) {\n    parsed.caption += `\\n\\n${location}`;\n  }\n}\n\nif (Array.isArray(parsed.hashtags)) {\n  parsed.hashtags = parsed.hashtags\n    .map(tag => `#${String(tag).trim().replace(/^#+/u, \"\").replace(/\\s+/gu, \"\")}`)\n    .filter(tag => tag.length > 1);\n}\n\nreturn {\n  json: {\n    jour: source.jour,\n    famille: source.famille,\n    variante: source.variante,\n    attempt: source.attempt || 1,\n    target_due_at: source.target_due_at,\n    ...parsed\n  }\n};\n",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "6d1ca4b0-e8c2-4544-9b22-e18fb9254b47"
+    },
+    {
+      "name": "Préparer Photo de Fond IA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Prépare une photo de fond contextuelle. L'IA ne produit aucun texte ni élément graphique :\n// ceux-ci restent exclusivement gérés par les gabarits Figma du render-service.\nconst d = $json;\nconst content = JSON.stringify(d.slides || []).slice(0, 5000);\nconst prompt = `Luxury event editorial photography in Abidjan, Côte d'Ivoire, created as a background for a TERA EVENTS social-media design. Subject and intent: ${content}. Show a credible high-end event scene related to event planning, catering, decoration or an event venue. If people appear, every person must be Black African, with natural Ivorian or West African appearance. Refined navy blue, warm blush and neutral tones, cinematic lighting, realistic professional photography, premium but welcoming atmosphere. Leave calm visual space for overlaid typography. Absolutely no readable text, letters, numbers, logos, watermarks, signage or invented branding. Square composition with safe central crop.`;\n\nreturn {\n  json: {\n    gemini_request: {\n      contents: [{ parts: [{ text: prompt }] }],\n      generationConfig: { responseModalities: [\"IMAGE\"] }\n    }\n  }\n};\n",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "35abe82b-3576-4114-8859-2253ab37ff16"
+    },
+    {
+      "name": "Générer Photo de Fond",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/images/generations",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model:\"gpt-image-2.5-flare\",prompt:$json.gemini_request.contents[0].parts[0].text,n:1,size:\"1024x1024\",quality:\"medium\",output_format:\"jpeg\"}) }}",
+        "options": {
+          "timeout": 270000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 15000,
+      "id": "c3c2cb88-675c-4389-9ddc-da280f6b6f24",
+      "credentials": {
+        "openAiApi": {
+          "name": "OpenAI - TERA EVENTS"
+        }
+      }
+    },
+    {
+      "name": "Associer Photo Générée",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Réassocie la réponse image au contenu éditorial avant le rendu Figma.\nconst source = $(\"Parser Réponse OpenAI\").item.json;\n\n// Le Chiffre du mercredi est un carrousel 100 % graphique. Même si une réponse image existe en\n// amont, elle ne doit jamais être transmise aux cinq gabarits de cette série.\nif (source.famille === \"savoirfaire\" && source.variante === \"chiffre\") {\n  const { background_image, background_images, ...withoutBackground } = source;\n  return { json: withoutBackground };\n}\n\nconst imageData = $json.data?.[0]?.b64_json;\nif (!imageData) {\n  throw new Error(\"OpenAI n'a retourné aucune image exploitable.\");\n}\n\nreturn {\n  json: {\n    ...source,\n    background_image: `data:image/jpeg;base64,${imageData}`\n  }\n};\n",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "6626fb21-52d0-4fb3-8996-f2600f6ba803"
+    },
+    {
+      "name": "Préparer Requêtes Visuel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// \"Préparer Requêtes Visuel\" — transforme le JSON rédigé par Claude (slides + caption +\n// hashtags) en une liste d'appels au render-service, un par slide/gabarit. Injecte ici les\n// éléments de marque fixes (tags de catégorie, coordonnées, CTA visuel statique) que Claude ne\n// génère jamais, pour ne courir aucun risque d'erreur sur une donnée de marque.\n//\n// IMPORTANT : les noms de champs ci-dessous doivent correspondre exactement à ceux attendus par\n// render-service/layouts.js. Toute évolution d'un gabarit doit être répercutée aux deux endroits.\n\nconst TEMPLATE_MAP = {\n  \"declic:traiteur\": [\"tera-declic-traiteur\"],\n  \"declic:eventplanning\": [\n    \"tera-declic-eventplanning-s1\",\n    \"tera-declic-eventplanning-s2\",\n    \"tera-declic-eventplanning-s3\",\n    \"tera-declic-eventplanning-s4\",\n    \"tera-declic-eventplanning-s5\"\n  ],\n  \"savoirfaire:generique\": [\n    \"tera-savoirfairemercredi-s1\",\n    \"tera-savoirfairemercredi-s2\",\n    \"tera-savoirfairemercredi-s3\",\n    \"tera-savoirfairemercredi-s4\"\n  ],\n  \"savoirfaire:chiffre\": [\n    \"tera-chiffremercredi-s1\",\n    \"tera-chiffremercredi-s2\",\n    \"tera-chiffremercredi-s3\",\n    \"tera-chiffremercredi-s4\",\n    \"tera-chiffremercredi-s5\"\n  ],\n  \"savoirfaire:traiteur\": [\n    \"tera-savoirfairetraiteur-s1\",\n    \"tera-savoirfairetraiteur-s2\",\n    \"tera-savoirfairetraiteur-s3\",\n    \"tera-savoirfairetraiteur-s4\",\n    \"tera-savoirfairetraiteur-s5\"\n  ],\n  \"ancrage:a\": [\"tera-ancragevendredi-a\"],\n  \"ancrage:b\": [\"tera-ancragevendredi-b\"]\n};\n\n// Champs de marque fixes, injectés à chaque appel de la famille/variante correspondante — jamais\n// laissés à la charge de Claude.\nconst STATIC_FIELDS = {\n  \"declic:traiteur\": { tag: \"LE DÉCLIC · TRAITEUR\", devise: \"FCFA\" },\n  \"declic:eventplanning\": { tag: \"LE DÉCLIC · EVENT PLANNING\" },\n  \"savoirfaire:generique\": {},\n  \"savoirfaire:chiffre\": { edition_label: \"Le chiffre du mercredi\" },\n  \"savoirfaire:traiteur\": {},\n  \"ancrage:a\": { tag: \"L'ANCRAGE DU VENDREDI\" },\n  \"ancrage:b\": { tag: \"L'ANCRAGE DU VENDREDI\", cta_label: \"Demander un devis →\" }\n};\n\nfunction buildVisualRequests(d) {\n  const key = `${d.famille}:${d.variante}`;\n  const isChiffreDuMercredi = key === \"savoirfaire:chiffre\";\n  const templates = TEMPLATE_MAP[key];\n  if (!templates) {\n    throw new Error(`Aucun gabarit défini pour famille=\"${d.famille}\" variante=\"${d.variante}\".`);\n  }\n\n  const slides = Array.isArray(d.slides) ? d.slides : [];\n  const hashtagsText = Array.isArray(d.hashtags) ? d.hashtags.join(\" \") : (d.hashtags || \"\");\n  const caption = [d.caption, hashtagsText].filter(Boolean).join(\"\\n\\n\");\n  const postId = $execution.id + \"-\" + d.jour;\n  const backgroundImages = Array.isArray(d.background_images) ? d.background_images : [];\n\n  // La grande valeur de la slide 2 doit rester aussi courte que dans le gabarit Figma.\n  // Si une phrase a \uFFFDt\uFFFD produite, reprendre le chiffre et l'unit\uFFFD de la couverture.\n  if (isChiffreDuMercredi && slides[1] && String(slides[1].statistique || \"\").length > 14) {\n    const chiffre = String(slides[0]?.chiffre || \"\").trim();\n    const unite = String(slides[0]?.unite || \"\").trim();\n    slides[1] = { ...slides[1], statistique: [chiffre, unite].filter(Boolean).join(\" \") };\n  }\n\n  // Les formulations interrogatives doivent toujours porter leur ponctuation, m\uFFFDme si le\n  // mod\uFFFDle l'a omise. Cette normalisation s'applique au titre et aux trois questions de la slide 3.\n  if (isChiffreDuMercredi && slides[2]) {\n    const withQuestionMark = (value) => {\n      const text = String(value || \"\").trim();\n      if (!/^(pourquoi|comment|qui|que|quel|quelle|quels|quelles|quand|o\uFFFD|combien)\\b/i.test(text)) return text;\n      return text.replace(/[.!?…]+$/u, \"\").trim() + \" ?\";\n    };\n    slides[2] = {\n      ...slides[2],\n      titre: withQuestionMark(slides[2].titre),\n      conseil1_titre: withQuestionMark(slides[2].conseil1_titre),\n      conseil2_titre: withQuestionMark(slides[2].conseil2_titre),\n      conseil3_titre: withQuestionMark(slides[2].conseil3_titre)\n    };\n  }\n\n  return templates.map((template, idx) => {\n    const slideFields = slides[idx] || {};\n    // L'image est choisie en amont dans la banque média, indépendamment de la rédaction Claude.\n    // Une image propre à la slide est prioritaire, puis celle de la liste du carrousel, puis le\n    // fond commun de la publication. Sans image fournie, le fond Figma canonique reste le fallback.\n    const backgroundImage = isChiffreDuMercredi\n      ? undefined\n      : (slideFields.background_image || backgroundImages[idx] || d.background_image);\n    const backgroundPosition = isChiffreDuMercredi\n      ? undefined\n      : (slideFields.background_position || d.background_position);\n    return {\n      json: {\n        post_id: postId,\n        jour: d.jour,\n        famille: d.famille,\n        variante: d.variante,\n        template,\n        slide_index: idx + 1,\n        slide_count: templates.length,\n        target_due_at: d.target_due_at,\n        render_body: {\n          ...STATIC_FIELDS[key],\n          ...slideFields,\n          ...(backgroundImage ? { background_image: backgroundImage } : {}),\n          ...(backgroundPosition ? { background_position: backgroundPosition } : {})\n        },\n        caption\n      }\n    };\n  });\n}\n\nreturn $input.all().flatMap(item => buildVisualRequests(item.json));\n"
+      },
+      "id": "a1ccecae-81eb-4786-abfe-efc00e024bb3"
+    },
+    {
+      "name": "Générer les Prévisualisations TERA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.TERA_RENDER_BASE_URL || 'https://tera-visuels.srv1896382.hstgr.cloud') + '/render/' + $json.template }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.render_body) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "id": "d7c5d235-c273-42ae-bbab-a4560931ec12",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "TERA Render Service Token"
+        }
+      }
+    },
+    {
+      "name": "Associer les Visuels",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const source = $('Préparer Requêtes Visuel').item.json;\nreturn { json: { ...source, ...$json } };"
+      },
+      "id": "9d6bd1b0-035c-4f64-b331-fa9e3e07513b"
+    },
+    {
+      "name": "Collecter la Semaine Complète",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3000,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// n8n node mode: runOnceForAllItems\n// Les appels externes peuvent livrer les rendus en plusieurs vagues. Ce collecteur n'émet rien\n// tant que les trois jours et toutes les slides attendues ne sont pas présents.\nconst state = $getWorkflowStaticData(\"global\");\nif (!state.weeklyPackAccumulator) state.weeklyPackAccumulator = {};\n\nconst executionKey = String($execution.id);\nconst existing = Array.isArray(state.weeklyPackAccumulator[executionKey])\n  ? state.weeklyPackAccumulator[executionKey]\n  : [];\n\nconst incoming = $input.all().map(item => item.json);\nconst merged = [...existing, ...incoming];\nconst unique = new Map();\n\nfor (const item of merged) {\n  const key = `${item.post_id || item.jour}:${item.slide_index || 1}`;\n  unique.set(key, item);\n}\n\nconst collected = [...unique.values()];\nstate.weeklyPackAccumulator[executionKey] = collected;\n\n// Le dimanche 1er novembre constitue une transition : le lundi 2 est déjà programmé. Le pack\n// de ce soir-là attend donc seulement mercredi et vendredi. Le cycle normal à trois jours reprend\n// automatiquement dès l'exécution hebdomadaire suivante.\nconst todayUtc = new Date().toISOString().slice(0, 10);\nconst requiredDays = todayUtc === \"2026-11-01\"\n  ? [\"Mercredi\", \"Vendredi\"]\n  : [\"Lundi\", \"Mercredi\", \"Vendredi\"];\nconst complete = requiredDays.every(jour => {\n  const slides = collected.filter(item => item.jour === jour);\n  if (!slides.length) return false;\n  const expected = Number(slides[0].slide_count || 1);\n  return slides.length >= expected;\n});\n\nif (!complete) return [];\n\ndelete state.weeklyPackAccumulator[executionKey];\nreturn collected.map(json => ({ json }));\n"
+      },
+      "id": "5331bd4f-3d7f-47ac-a9b4-d8c4599518f9"
+    },
+    {
+      "name": "Préparer Pack Figma + Double Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// \"Préparer Pack Figma + Double Validation\" — regroupe les publications des 3 créneaux de la semaine (lundi,\n// mercredi, vendredi) et construit le formulaire de validation groupé, sur le modèle éprouvé de\n// La Lignée (code_hebdo_prepare_pack.js) : un seul geste de validation le dimanche plutôt que 3\n// validations séparées dans la semaine.\n\nfunction escapeHtml(str) {\n  if (str === undefined || str === null) return \"\";\n  return String(str)\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace(/>/g, \"&gt;\")\n    .replace(/\"/g, \"&quot;\")\n    .replace(/'/g, \"&#039;\")\n    .replace(/\\n/g, \"<br>\");\n}\n\n// Les gabarits TERA n'ont pas de champ \"titre\" unique et commun (titre/headline/citation/chiffre\n// selon la famille) — on prend le premier qui existe pour l'aperçu du pack.\nfunction titleFor(renderBody) {\n  return renderBody.titre || renderBody.headline || renderBody.citation || renderBody.chiffre || \"\";\n}\n\n// Fichier central modifiable dans lequel sont classées les créations de la semaine.\n// Ce lien est volontairement public au workflow : aucune clé ni aucun secret Figma n'est stocké ici.\nconst FIGMA_PUBLICATIONS_URL = \"https://www.figma.com/design/vZn7iir8VGn5fh8M9tIfXZ/GABARIT-TERA-EVENTS?node-id=230-2\";\n\nconst items = $input.all();\nconst byJour = {};\nitems.forEach(it => {\n  const j = it.json.jour;\n  if (!byJour[j]) byJour[j] = [];\n  byJour[j].push(it.json);\n});\n\nconst jourOrder = [\"Lundi\", \"Mercredi\", \"Vendredi\"];\n\nconst slots = jourOrder\n  .filter(j => byJour[j])\n  .map(jour => {\n    const group = byJour[jour].sort((a, b) => (a.slide_index || 1) - (b.slide_index || 1));\n    const hero = group.find(g => g.slide_index === 1) || group[0];\n    const caption = group[0].caption;\n    const rawTitle = titleFor(hero.render_body || {});\n    // Une génération dont la réponse Claude n'a pas pu être parsée dégrade gracieusement en amont\n    // plutôt que de planter, mais laisse ce créneau sans titre ni légende — à signaler clairement\n    // ici plutôt que d'afficher un aperçu vide sans explication.\n    const looksFailed = !caption && !rawTitle;\n    const titleText = rawTitle || `${jour} — ${group[0].famille}/${group[0].variante}`;\n    const sourceRequired =\n      (group[0].famille === \"savoirfaire\" && group[0].variante === \"chiffre\") ||\n      (group[0].famille === \"declic\" && group[0].variante === \"traiteur\");\n    return {\n      jour,\n      famille: group[0].famille,\n      variante: group[0].variante,\n      publicationId: group[0].publication_id || `TERA-${String(group[0].target_due_at || \"sans-date\").slice(0, 10)}-${jour.toUpperCase()}`,\n      contentRevision: group[0].content_revision || 1,\n      targetDueAt: group[0].target_due_at,\n      figmaUrl: group[0].figma_url || FIGMA_PUBLICATIONS_URL,\n      sourceRequired,\n      heroImageUrl: hero.url,\n      titleText,\n      caption,\n      looksFailed,\n      renderItems: group\n    };\n  });\n\nconst fields = [{\n  fieldLabel: \" \",\n  fieldType: \"html\",\n  html: `<div style=\"padding:18px 20px;margin:0 0 22px;background:#07173d;border-radius:10px;color:#fff;\">` +\n    `<h2 style=\"margin:0 0 10px;color:#fff;\">Fichier Figma des publications TERA EVENTS</h2>` +\n    `<p style=\"margin:0 0 14px;line-height:1.5;\">Consultez ou modifiez les visuels de la semaine dans le fichier central avant de valider leur programmation.</p>` +\n    `<a href=\"${FIGMA_PUBLICATIONS_URL}\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"display:inline-block;padding:11px 18px;background:#efa8a6;color:#07173d;text-decoration:none;border-radius:999px;font-weight:700;\">OUVRIR LES VISUELS DANS FIGMA</a>` +\n    `</div>`\n}];\nslots.forEach(s => {\n  const warningBanner = s.looksFailed\n    ? `<p style=\"color:#b00; font-weight:bold;\">⚠️ La génération a échoué pour cette publication (réponse non exploitable). Choisissez \"Modifier\" pour la régénérer automatiquement, un commentaire n'est pas nécessaire.</p>`\n    : \"\";\n  const orderedVisuals = [...(s.renderItems || [])]\n    .sort((a, b) => (a.slide_index || 1) - (b.slide_index || 1));\n  const visualGallery = orderedVisuals\n    .map((item, index) => {\n      const slideNumber = item.slide_index || index + 1;\n      const totalSlides = item.slide_count || orderedVisuals.length;\n      return `<div style=\"display:inline-block;vertical-align:top;width:280px;margin:0 14px 18px 0;\">` +\n        `<p style=\"margin:0 0 6px;font-weight:700;\">Visuel ${slideNumber}/${totalSlides}</p>` +\n        `<img src=\"${escapeHtml(item.url)}\" alt=\"${escapeHtml(`${s.jour} — visuel ${slideNumber} sur ${totalSlides}`)}\" style=\"display:block;width:100%;max-width:280px;height:auto;border-radius:8px;border:1px solid #e3e3e3\" />` +\n        `</div>`;\n    })\n    .join(\"\");\n  fields.push({\n    fieldLabel: \" \",\n    fieldType: \"html\",\n    html: `<h3>${escapeHtml(s.jour)} — ${escapeHtml(s.famille)} / ${escapeHtml(s.variante)}</h3>` +\n      `${warningBanner}` +\n      `<p><b>Publication :</b> ${escapeHtml(s.publicationId)} · version ${escapeHtml(s.contentRevision)}<br>` +\n      `<b>Créneau :</b> ${escapeHtml(s.targetDueAt || \"à confirmer\")} · Africa/Abidjan<br>` +\n      `<b>Réseaux :</b> Facebook, Instagram et LinkedIn</p>` +\n      `<p><a href=\"${escapeHtml(s.figmaUrl)}\" target=\"_blank\" rel=\"noopener noreferrer\"><b>Ouvrir la section Figma de cette publication</b></a></p>` +\n      `<p><b>${orderedVisuals.length > 1 ? `Carrousel complet — ${orderedVisuals.length} visuels à valider` : \"Visuel à valider\"}</b></p>` +\n      `<div style=\"font-size:0;\">${visualGallery}</div>` +\n      `<h4 style=\"margin:18px 0 8px;\">Texte de la publication à valider</h4>` +\n      `<p><b>${escapeHtml(s.titleText)}</b></p>` +\n      `<p style=\"line-height:1.55;\">${escapeHtml(s.caption)}</p>` +\n      `<p style=\"color:#555;\"><i>Le texte et les visuels doivent être décidés séparément. Aucun accord manquant ne permet la programmation.</i></p>`\n  });\n  fields.push({\n    fieldLabel: `${s.jour} — décision texte`,\n    fieldType: \"dropdown\",\n    fieldOptions: { values: [{ option: \"Valider\" }, { option: \"Modifier\" }, { option: \"Refuser\" }] },\n    requiredField: true\n  });\n  fields.push({\n    fieldLabel: `${s.jour} — décision visuelle`,\n    fieldType: \"dropdown\",\n    fieldOptions: { values: [{ option: \"Valider\" }, { option: \"Modifier\" }, { option: \"Refuser\" }] },\n    requiredField: true\n  });\n  if (s.sourceRequired) {\n    fields.push({\n      fieldLabel: `${s.jour} — contrôle des sources`,\n      fieldType: \"dropdown\",\n      fieldOptions: { values: [{ option: \"Sources confirmées\" }, { option: \"Sources à revoir\" }] },\n      requiredField: true\n    });\n  }\n  fields.push({\n    fieldLabel: `${s.jour} — Commentaire (requis si Modifier)`,\n    fieldType: \"textarea\",\n    requiredField: false\n  });\n});\n\nreturn [{\n  json: {\n    slots,\n    figmaPublicationsUrl: FIGMA_PUBLICATIONS_URL,\n    formFieldsJson: JSON.stringify(fields, null, 2)\n  }\n}];\n"
+      },
+      "id": "6e138f9b-75af-427f-972e-c2f6cd2ec4a2"
+    },
+    {
+      "name": "Envoyer Pack de Validation",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        3360,
+        0
+      ],
+      "parameters": {
+        "operation": "sendAndWait",
+        "fromEmail": "cabinetlalignee@gmail.com",
+        "toEmail": "cabinetlalignee@gmail.com",
+        "subject": "TERA EVENTS - Validation hebdomadaire",
+        "message": "Voici les trois publications proposées. Validez, modifiez ou refusez chaque contenu.",
+        "responseType": "customForm",
+        "defineForm": "json",
+        "jsonOutput": "={{ $json.formFieldsJson }}",
+        "options": {}
+      },
+      "id": "9dd0e162-2f91-4d59-ad4f-2366520c7afc",
+      "webhookId": "b1548b26-16c9-4027-a183-736081de0c07",
+      "credentials": {
+        "smtp": {
+          "name": "Gmail SMTP - La Lign\uFFFDe"
+        }
+      }
+    },
+    {
+      "name": "Contrôler Accords Texte + Visuels",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// \"Contrôler Accords Texte + Visuels\" — répartit les décisions du formulaire de validation\n// (une ligne Valider/Modifier/Refuser + commentaire par créneau) vers les branches de routage.\n\nconst formData = $(\"Envoyer Pack de Validation\").item.json.data;\nconst slots = $(\"Préparer Pack Figma + Double Validation\").item.json.slots;\nconst pilierConfig = $(\"Préparer les 3 publications\").all().map(i => i.json);\n\nconst results = [];\nslots.forEach(s => {\n  const decisionTexte = formData[`${s.jour} — décision texte`];\n  const decisionVisuelle = formData[`${s.jour} — décision visuelle`];\n  const decisionSources = s.sourceRequired\n    ? formData[`${s.jour} — contrôle des sources`]\n    : \"Sans objet\";\n  const commentaire = formData[`${s.jour} — Commentaire (requis si Modifier)`] || \"\";\n  if ((decisionTexte === \"Modifier\" || decisionVisuelle === \"Modifier\") && !commentaire.trim()) {\n    throw new Error(`${s.jour} : un commentaire est requis lorsqu'une modification est demandée.`);\n  }\n  const decision = decisionTexte === \"Refuser\" || decisionVisuelle === \"Refuser\"\n    ? \"Refuser\"\n    : decisionTexte === \"Valider\" && decisionVisuelle === \"Valider\" && decisionSources !== \"Sources à revoir\"\n      ? \"Valider\"\n      : \"Modifier\";\n  const config = pilierConfig.find(c => c.jour === s.jour) || {};\n  results.push({\n    json: {\n      jour: s.jour,\n      famille: s.famille,\n      variante: s.variante,\n      attempt: config.attempt || 1,\n      target_due_at: config.target_due_at,\n      decision,\n      decisionTexte,\n      decisionVisuelle,\n      decisionSources,\n      commentaire,\n      renderItems: s.renderItems\n    }\n  });\n});\n\nreturn results;\n"
+      },
+      "id": "decfc8aa-8b41-42d4-8cd1-174848a725d7"
+    },
+    {
+      "name": "Textes + Visuels validés ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3840,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "est-valider-",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "Valider",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "58121af4-8711-42f8-a695-cd26f50e1da6"
+    },
+    {
+      "name": "Préparer Publication Buffer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        -160
+      ],
+      "parameters": {
+        "jsCode": "// \"Préparer Buffer\" — transforme une publication validée en requête de programmation.\n// Les identifiants de canaux sont lus depuis l'environnement n8n, jamais écrits dans le code.\n\nconst CHANNELS = {\n  facebook: $env.BUFFER_CHANNEL_FACEBOOK,\n  instagram: $env.BUFFER_CHANNEL_INSTAGRAM,\n  linkedin: $env.BUFFER_CHANNEL_LINKEDIN\n};\n\nconst missing = Object.entries(CHANNELS)\n  .filter(([, value]) => !value)\n  .map(([name]) => name);\n\nif (missing.length) {\n  throw new Error(`Canaux Buffer manquants : ${missing.join(\", \")}. Renseigne les variables BUFFER_CHANNEL_* dans l'environnement n8n.`);\n}\n\nconst mutation = `mutation CreatePost($input: CreatePostInput!) {\n  createPost(input: $input) {\n    ... on PostActionSuccess { post { id text dueAt } }\n    ... on MutationError { message }\n  }\n}`;\n\nfunction buildBufferRequests(d) {\n  if (d.decision !== \"Valider\") return [];\n\n  const renderItems = Array.isArray(d.renderItems) ? d.renderItems : [];\n  const media = [...renderItems]\n    .sort((a, b) => (a.slide_index || 1) - (b.slide_index || 1))\n    .map(item => item.url)\n    .filter(Boolean);\n\n  if (!media.length) throw new Error(`Aucun visuel rendu pour la publication du ${d.jour}.`);\n\n  const caption = renderItems[0]?.caption || d.caption || \"\";\n  if (!caption) throw new Error(`Aucune légende disponible pour la publication du ${d.jour}.`);\n\n  return Object.entries(CHANNELS).map(([network, channelId]) => ({\n    json: {\n      post_id: renderItems[0]?.post_id,\n      jour: d.jour,\n      network,\n      channel_id: channelId,\n      due_at: d.target_due_at,\n      text: caption,\n      media,\n      status: \"pending_buffer\",\n      graphql_body: {\n        query: mutation,\n        variables: {\n          input: {\n            text: caption,\n            channelId,\n            assets: media.map(url => ({ image: { url } })),\n            schedulingType: \"automatic\",\n            mode: \"customScheduled\",\n            dueAt: d.target_due_at,\n            ...(network === \"facebook\" ? { metadata: { facebook: { type: \"post\" } } } : {}),\n            ...(network === \"instagram\" ? { metadata: { instagram: { type: \"post\", shouldShareToFeed: true } } } : {})\n          }\n        }\n      }\n    }\n  }));\n}\n\nreturn $input.all().flatMap(item => buildBufferRequests(item.json));\n"
+      },
+      "id": "dc6749c1-931f-46a9-8e9f-cfd726288922"
+    },
+    {
+      "name": "Programmer sur Buffer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4320,
+        -160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.buffer.com/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.graphql_body) }}",
+        "options": {}
+      },
+      "id": "735200fa-7001-42b6-8e4d-643ab0746e3b",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "name": "Vérifier Réponse Buffer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4560,
+        -160
+      ],
+      "parameters": {
+        "jsCode": "// n8n node mode: runOnceForEachItem\n// Buffer peut renvoyer une erreur métier dans une réponse HTTP 200. Sans ce contrôle, n8n\n// considère à tort la programmation comme réussie.\nconst response = $json;\nconst result = response?.data?.createPost;\n\nif (!result) {\n  throw new Error(\"Buffer n'a renvoyé aucun résultat createPost.\");\n}\n\nif (result.message) {\n  throw new Error(`Buffer a refusé la programmation : ${result.message}`);\n}\n\nif (!result.post?.id) {\n  throw new Error(\"Buffer n'a créé aucune publication et n'a fourni aucun identifiant.\");\n}\n\nreturn {\n  json: {\n    buffer_post_id: result.post.id,\n    due_at: result.post.dueAt,\n    status: \"scheduled\"\n  }\n};\n",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "00840d80-adb6-4769-8be5-869ffbd1f92e"
+    },
+    {
+      "name": "Est Modifier ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4080,
+        80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "est-modifier-",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "Modifier",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2955e71d-dc8f-4cb5-a3c2-5abd52ee957c"
+    },
+    {
+      "name": "Sous Limite Tentatives ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4320,
+        40
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "limite",
+              "leftValue": "={{ ($json.attempt || 1) < 3 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "820ede0d-264e-4011-8973-72d29240dbb0"
+    },
+    {
+      "name": "Préparer Régénération",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4560,
+        -20
+      ],
+      "parameters": {
+        "jsCode": "// \"Préparer Régénération\" — renvoie les publications à modifier vers la préparation du prompt.\n// Le commentaire humain est prioritaire ; en cas d'échec technique, une consigne neutre suffit.\n\nconst d = $json;\nif (d.decision !== \"Modifier\") return [];\n\nconst attempt = Number(d.attempt || 1) + 1;\nconst maxAttempts = 3;\nif (attempt > maxAttempts) {\n  throw new Error(`Nombre maximal de régénérations atteint pour ${d.jour}. Une intervention humaine est nécessaire.`);\n}\n\nconst feedback = String(d.commentaire || \"\").trim() ||\n  \"La proposition précédente n'était pas exploitable. Reprends entièrement le contenu en respectant le schéma JSON, la ligne éditoriale et les faits TERA.\";\n\nreturn [{\n  json: {\n    jour: d.jour,\n    famille: d.famille,\n    variante: d.variante,\n    target_due_at: d.target_due_at,\n    attempt,\n    modification_feedback: feedback,\n    previous_render_items: d.renderItems || []\n  }\n}];\n"
+      },
+      "id": "85f8e4dc-e98b-4a5b-918e-a5f14a426899"
+    },
+    {
+      "name": "Refusé",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4320,
+        200
+      ],
+      "parameters": {},
+      "id": "d2d80a2c-b4aa-4ddc-b7ef-ba22a89dbbd8"
+    },
+    {
+      "name": "Abandon après 3 tentatives",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4560,
+        140
+      ],
+      "parameters": {},
+      "id": "a898ac7b-0809-4708-95a3-5ae63a1f3d6e"
+    },
+    {
+      "parameters": {
+        "content": "## FIGMA TERA — MODE ASSISTÉ\nLes prévisualisations techniques alimentent le pack. Le fichier central Figma et les liens sont joints à la relecture. Les calques éditables restent une tâche opérateur tant qu’un adaptateur d’écriture Figma n’est pas déployé. Une retouche visuelle exige une nouvelle validation.",
+        "height": 300,
+        "width": 520,
+        "color": 5
+      },
+      "id": "tera-figma-assisted-note",
+      "name": "NOTE — FIGMA ASSISTÉ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3060,
+        -580
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## DOUBLE VALIDATION OBLIGATOIRE\nPour chaque publication : décision texte + décision visuelle + contrôle des sources si nécessaire. Aucun accord manquant, refus ou “à revoir” ne peut atteindre Buffer. Les carrousels sont présentés slide par slide.",
+        "height": 300,
+        "width": 520,
+        "color": 4
+      },
+      "id": "tera-double-validation-note",
+      "name": "NOTE — DOUBLE VALIDATION",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3760,
+        -580
+      ]
+    }
+  ],
+  "connections": {
+    "Déclencheur Hebdomadaire (Dimanche)": {
+      "main": [
+        [
+          {
+            "node": "Préparer les 3 publications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Déclenchement Manuel": {
+      "main": [
+        [
+          {
+            "node": "Préparer les 3 publications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer les 3 publications": {
+      "main": [
+        [
+          {
+            "node": "Préparer le Prompt OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer le Prompt OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Générer le contenu (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Générer le contenu (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Parser Réponse OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser Réponse OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Préparer Photo de Fond IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer Photo de Fond IA": {
+      "main": [
+        [
+          {
+            "node": "Générer Photo de Fond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Générer Photo de Fond": {
+      "main": [
+        [
+          {
+            "node": "Associer Photo Générée",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Associer Photo Générée": {
+      "main": [
+        [
+          {
+            "node": "Préparer Requêtes Visuel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer Requêtes Visuel": {
+      "main": [
+        [
+          {
+            "node": "Générer les Prévisualisations TERA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Générer les Prévisualisations TERA": {
+      "main": [
+        [
+          {
+            "node": "Associer les Visuels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Associer les Visuels": {
+      "main": [
+        [
+          {
+            "node": "Collecter la Semaine Complète",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collecter la Semaine Complète": {
+      "main": [
+        [
+          {
+            "node": "Préparer Pack Figma + Double Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer Pack Figma + Double Validation": {
+      "main": [
+        [
+          {
+            "node": "Envoyer Pack de Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer Pack de Validation": {
+      "main": [
+        [
+          {
+            "node": "Contrôler Accords Texte + Visuels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contrôler Accords Texte + Visuels": {
+      "main": [
+        [
+          {
+            "node": "Textes + Visuels validés ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Textes + Visuels validés ?": {
+      "main": [
+        [
+          {
+            "node": "Préparer Publication Buffer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Est Modifier ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer Publication Buffer": {
+      "main": [
+        [
+          {
+            "node": "Programmer sur Buffer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Programmer sur Buffer": {
+      "main": [
+        [
+          {
+            "node": "Vérifier Réponse Buffer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Est Modifier ?": {
+      "main": [
+        [
+          {
+            "node": "Sous Limite Tentatives ?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Refusé",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sous Limite Tentatives ?": {
+      "main": [
+        [
+          {
+            "node": "Préparer Régénération",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Abandon après 3 tentatives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer Régénération": {
+      "main": [
+        [
+          {
+            "node": "Préparer le Prompt OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Abidjan",
+    "binaryMode": "separate"
+  },
+  "active": true,
+  "versionId": "aebd783f-fceb-4bc6-ba73-b52ad807d143",
+  "meta": {
+    "exportedAt": "2026-11-04T00:07:46.943Z",
+    "workflowId": "wrq6FhVvULDUuUUp",
+    "note": "Credential references only; no secret values are exported."
+  }
+}

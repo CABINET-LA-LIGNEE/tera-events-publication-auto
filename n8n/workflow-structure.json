@@ -1,0 +1,745 @@
+{
+  "name": "TERA EVENTS - Publication Hebdomadaire",
+  "nodes": [
+    {
+      "name": "Déclencheur Hebdomadaire (Dimanche)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        -160
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                0
+              ],
+              "triggerAtHour": 18
+            }
+          ]
+        }
+      },
+      "id": "b2a91102-150c-4cee-8cda-aaaf5f449235"
+    },
+    {
+      "name": "Déclenchement Manuel",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {},
+      "id": "7ac9442f-b981-4626-b5c7-6c9ecf524cea"
+    },
+    {
+      "name": "Préparer les 3 publications",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {},
+      "id": "cdbdf5d9-2c8b-4fd7-ad5c-caf650ddd97b"
+    },
+    {
+      "name": "Préparer le Prompt OpenAI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem"
+      },
+      "id": "89c4743b-359f-47d9-9130-960016724a7a"
+    },
+    {
+      "name": "Générer le contenu (OpenAI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model:\"gpt-6.1-sol\",instructions:$json.anthropic_request.system,input:($json.anthropic_request.messages||[]).map(m=>({role:m.role,content:m.content})),max_output_tokens:6500,store:false}) }}",
+        "options": {
+          "timeout": 270000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "id": "73d5b599-990b-44b8-be1a-b85a68ff36fb"
+    },
+    {
+      "name": "Parser Réponse OpenAI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem"
+      },
+      "id": "6d1ca4b0-e8c2-4544-9b22-e18fb9254b47"
+    },
+    {
+      "name": "Préparer Photo de Fond IA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem"
+      },
+      "id": "35abe82b-3576-4114-8859-2253ab37ff16"
+    },
+    {
+      "name": "Générer Photo de Fond",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/images/generations",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model:\"gpt-image-2.5-flare\",prompt:$json.gemini_request.contents[0].parts[0].text,n:1,size:\"1024x1024\",quality:\"medium\",output_format:\"jpeg\"}) }}",
+        "options": {
+          "timeout": 270000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 15000,
+      "id": "c3c2cb88-675c-4389-9ddc-da280f6b6f24"
+    },
+    {
+      "name": "Associer Photo Générée",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem"
+      },
+      "id": "6626fb21-52d0-4fb3-8996-f2600f6ba803"
+    },
+    {
+      "name": "Préparer Requêtes Visuel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        0
+      ],
+      "parameters": {},
+      "id": "a1ccecae-81eb-4786-abfe-efc00e024bb3"
+    },
+    {
+      "name": "Générer les Prévisualisations TERA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.TERA_RENDER_BASE_URL || 'https://tera-visuels.srv1896382.hstgr.cloud') + '/render/' + $json.template }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.render_body) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "id": "d7c5d235-c273-42ae-bbab-a4560931ec12"
+    },
+    {
+      "name": "Associer les Visuels",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem"
+      },
+      "id": "9d6bd1b0-035c-4f64-b331-fa9e3e07513b"
+    },
+    {
+      "name": "Collecter la Semaine Complète",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3000,
+        0
+      ],
+      "parameters": {},
+      "id": "5331bd4f-3d7f-47ac-a9b4-d8c4599518f9"
+    },
+    {
+      "name": "Préparer Pack Figma + Double Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        0
+      ],
+      "parameters": {},
+      "id": "6e138f9b-75af-427f-972e-c2f6cd2ec4a2"
+    },
+    {
+      "name": "Envoyer Pack de Validation",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        3360,
+        0
+      ],
+      "parameters": {
+        "operation": "sendAndWait",
+        "fromEmail": "cabinetlalignee@gmail.com",
+        "toEmail": "cabinetlalignee@gmail.com",
+        "subject": "TERA EVENTS - Validation hebdomadaire",
+        "message": "Voici les trois publications proposées. Validez, modifiez ou refusez chaque contenu.",
+        "responseType": "customForm",
+        "defineForm": "json",
+        "jsonOutput": "={{ $json.formFieldsJson }}",
+        "options": {}
+      },
+      "id": "9dd0e162-2f91-4d59-ad4f-2366520c7afc",
+      "webhookId": "b1548b26-16c9-4027-a183-736081de0c07"
+    },
+    {
+      "name": "Contrôler Accords Texte + Visuels",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        0
+      ],
+      "parameters": {},
+      "id": "decfc8aa-8b41-42d4-8cd1-174848a725d7"
+    },
+    {
+      "name": "Textes + Visuels validés ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3840,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "est-valider-",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "Valider",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "58121af4-8711-42f8-a695-cd26f50e1da6"
+    },
+    {
+      "name": "Préparer Publication Buffer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        -160
+      ],
+      "parameters": {},
+      "id": "dc6749c1-931f-46a9-8e9f-cfd726288922"
+    },
+    {
+      "name": "Programmer sur Buffer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4320,
+        -160
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.buffer.com/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.graphql_body) }}",
+        "options": {}
+      },
+      "id": "735200fa-7001-42b6-8e4d-643ab0746e3b"
+    },
+    {
+      "name": "Vérifier Réponse Buffer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4560,
+        -160
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem"
+      },
+      "id": "00840d80-adb6-4769-8be5-869ffbd1f92e"
+    },
+    {
+      "name": "Est Modifier ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4080,
+        80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "est-modifier-",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "Modifier",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2955e71d-dc8f-4cb5-a3c2-5abd52ee957c"
+    },
+    {
+      "name": "Sous Limite Tentatives ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4320,
+        40
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "limite",
+              "leftValue": "={{ ($json.attempt || 1) < 3 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "820ede0d-264e-4011-8973-72d29240dbb0"
+    },
+    {
+      "name": "Préparer Régénération",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4560,
+        -20
+      ],
+      "parameters": {},
+      "id": "85f8e4dc-e98b-4a5b-918e-a5f14a426899"
+    },
+    {
+      "name": "Refusé",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4320,
+        200
+      ],
+      "parameters": {},
+      "id": "d2d80a2c-b4aa-4ddc-b7ef-ba22a89dbbd8"
+    },
+    {
+      "name": "Abandon après 3 tentatives",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4560,
+        140
+      ],
+      "parameters": {},
+      "id": "a898ac7b-0809-4708-95a3-5ae63a1f3d6e"
+    },
+    {
+      "parameters": {
+        "content": "## FIGMA TERA — MODE ASSISTÉ\nLes prévisualisations techniques alimentent le pack. Le fichier central Figma et les liens sont joints à la relecture. Les calques éditables restent une tâche opérateur tant qu’un adaptateur d’écriture Figma n’est pas déployé. Une retouche visuelle exige une nouvelle validation.",
+        "height": 300,
+        "width": 520,
+        "color": 5
+      },
+      "id": "tera-figma-assisted-note",
+      "name": "NOTE — FIGMA ASSISTÉ",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3060,
+        -580
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## DOUBLE VALIDATION OBLIGATOIRE\nPour chaque publication : décision texte + décision visuelle + contrôle des sources si nécessaire. Aucun accord manquant, refus ou “à revoir” ne peut atteindre Buffer. Les carrousels sont présentés slide par slide.",
+        "height": 300,
+        "width": 520,
+        "color": 4
+      },
+      "id": "tera-double-validation-note",
+      "name": "NOTE — DOUBLE VALIDATION",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3760,
+        -580
+      ]
+    }
+  ],
+  "connections": {
+    "Déclencheur Hebdomadaire (Dimanche)": {
+      "main": [
+        [
+          {
+            "node": "Préparer les 3 publications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Déclenchement Manuel": {
+      "main": [
+        [
+          {
+            "node": "Préparer les 3 publications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer les 3 publications": {
+      "main": [
+        [
+          {
+            "node": "Préparer le Prompt OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer le Prompt OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Générer le contenu (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Générer le contenu (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Parser Réponse OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser Réponse OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Préparer Photo de Fond IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer Photo de Fond IA": {
+      "main": [
+        [
+          {
+            "node": "Générer Photo de Fond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Générer Photo de Fond": {
+      "main": [
+        [
+          {
+            "node": "Associer Photo Générée",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Associer Photo Générée": {
+      "main": [
+        [
+          {
+            "node": "Préparer Requêtes Visuel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer Requêtes Visuel": {
+      "main": [
+        [
+          {
+            "node": "Générer les Prévisualisations TERA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Générer les Prévisualisations TERA": {
+      "main": [
+        [
+          {
+            "node": "Associer les Visuels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Associer les Visuels": {
+      "main": [
+        [
+          {
+            "node": "Collecter la Semaine Complète",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collecter la Semaine Complète": {
+      "main": [
+        [
+          {
+            "node": "Préparer Pack Figma + Double Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer Pack Figma + Double Validation": {
+      "main": [
+        [
+          {
+            "node": "Envoyer Pack de Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer Pack de Validation": {
+      "main": [
+        [
+          {
+            "node": "Contrôler Accords Texte + Visuels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contrôler Accords Texte + Visuels": {
+      "main": [
+        [
+          {
+            "node": "Textes + Visuels validés ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Textes + Visuels validés ?": {
+      "main": [
+        [
+          {
+            "node": "Préparer Publication Buffer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Est Modifier ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer Publication Buffer": {
+      "main": [
+        [
+          {
+            "node": "Programmer sur Buffer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Programmer sur Buffer": {
+      "main": [
+        [
+          {
+            "node": "Vérifier Réponse Buffer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Est Modifier ?": {
+      "main": [
+        [
+          {
+            "node": "Sous Limite Tentatives ?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Refusé",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sous Limite Tentatives ?": {
+      "main": [
+        [
+          {
+            "node": "Préparer Régénération",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Abandon après 3 tentatives",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer Régénération": {
+      "main": [
+        [
+          {
+            "node": "Préparer le Prompt OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Abidjan",
+    "binaryMode": "separate"
+  },
+  "active": true,
+  "versionId": "aebd783f-fceb-4bc6-ba73-b52ad807d143",
+  "meta": {
+    "exportedAt": "2026-11-04T00:07:46.943Z",
+    "workflowId": "wrq6FhVvULDUuUUp",
+    "note": "Credential references only; no secret values are exported."
+  }
+}

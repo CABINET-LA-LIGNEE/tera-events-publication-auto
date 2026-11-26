@@ -1,4 +1,4 @@
-// "Préparer le Prompt Claude" (mode n8n : runOnceForEachItem)
+// "Préparer le Prompt OpenAI" (mode n8n : runOnceForEachItem)
 // Construit le system prompt + le schéma JSON attendu pour le créneau du jour (jour / famille /
 // variante, déterminés par code_prepare_pilliers.js), à partir de la charte éditoriale et du
 // brief créa validés avec le cabinet.
