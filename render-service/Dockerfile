@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json prepare-fonts.js ./
 RUN npm ci --omit=dev
 
-COPY server.js layouts.js font-css.js ./
+COPY server.js layouts.js font-css.js template-specs.json ./
 COPY backgrounds ./backgrounds
 
 ENV PORT=3000

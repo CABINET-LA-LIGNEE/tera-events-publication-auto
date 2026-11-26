@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "postinstall": "node prepare-fonts.js",
-    "test": "node verify-templates.js && node --test test/fonts.test.js"
+    "test": "node verify-templates.js && node --test \"test/*.test.js\""
   },
   "dependencies": {
     "@fontsource/caveat": "5.3.0",
