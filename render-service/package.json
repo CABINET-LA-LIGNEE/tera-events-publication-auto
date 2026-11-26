@@ -5,9 +5,18 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node verify-templates.js"
+    "postinstall": "node prepare-fonts.js",
+    "test": "node verify-templates.js && node --test test/fonts.test.js"
   },
   "dependencies": {
+    "@fontsource/caveat": "5.3.0",
+    "@fontsource/dm-sans": "5.3.0",
+    "@fontsource/dm-serif-display": "5.3.0",
+    "@fontsource/geist": "5.3.0",
+    "@fontsource/inter": "5.3.0",
+    "@fontsource/league-spartan": "5.3.0",
+    "@fontsource/playfair-display": "5.3.0",
+    "@fontsource/poppins": "5.3.0",
     "express": "^4.19.2",
     "playwright": "1.47.0"
   }
