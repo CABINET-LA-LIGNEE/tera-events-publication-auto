@@ -12,6 +12,19 @@ const AUTH_TOKEN = process.env.RENDER_AUTH_TOKEN || "";
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || "";
 const STORAGE_DIR = process.env.STORAGE_DIR || path.join(__dirname, "generated");
 fs.mkdirSync(STORAGE_DIR, { recursive: true });
+const dayMs = 24 * 60 * 60 * 1000;
+function purgeOldRenders() {
+  const cutoff = Date.now() - 30 * dayMs;
+  for (const entry of fs.readdirSync(STORAGE_DIR, { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    const file = path.join(STORAGE_DIR, entry.name);
+    try {
+      if (fs.statSync(file).mtimeMs < cutoff) fs.unlinkSync(file);
+    } catch (error) {
+      if (error.code !== "ENOENT") console.error(error);
+    }
+  }
+}
 
 const fileDataUris = {};
 function loadFile(name) {
@@ -59,17 +72,19 @@ function resolveText(n, data) {
 // alignement) plutôt que des positions absolues figées par champ — nécessaire pour que
 // l'espacement s'adapte au texte réellement généré exactement comme dans le fichier source.
 // ---------------------------------------------------------------------------------------------
-function renderNode(n, data) {
+function fitAttributes(field, specs, width, height) {
+  const spec = specs[field];
+  if (!spec) return "";
+  return `data-fit-text="1" data-field="${escapeHtml(field)}" data-max-width="${width || 0}" data-max-height="${height || 0}" data-max-lines="${spec.maxLines}" data-min-size="${spec.minSize}"`;
+}
+
+function renderNode(n, data, specs) {
   if (!n) return "";
 
   if (n.type === "text") {
     const text = resolveText(n, data);
     if (!text) return "";
-    // Les paragraphes utiles doivent rester lisibles lorsque le visuel est ramené à la largeur
-    // d'un téléphone. Les titres, badges et mentions de navigation conservent leur hiérarchie.
-    const isReadableBody = /^(texte|insight|body|moment\d+_texte|conseil\d+_texte)$/i.test(n.data || "");
-    const mobileMinSize = isReadableBody ? (n.mobileMinSize || 30) : 0;
-    const renderedSize = Math.max(n.size, mobileMinSize);
+    const renderedSize = n.size;
     const rotate = n.rotate ? `transform:rotate(${n.rotate}deg);` : "";
     const shadow = n.shadow ? `text-shadow:${n.shadow};` : "";
     const whiteSpace = n.nowrap ? "nowrap" : "pre-wrap";
@@ -83,11 +98,7 @@ function renderNode(n, data) {
     const underline = n.underline ? "text-decoration:underline;" : "";
     const balance = n.balance ? "text-wrap:balance;" : "";
     const position = n.x !== undefined ? `position:absolute; left:${n.x}px; top:${n.y}px;` : "";
-    const shouldAutoFit = n.fit || (!n.nowrap && n.static === undefined && n.data);
-    const minReadableSize = isReadableBody ? 30 : Math.min(n.size, 34);
-    const fit = shouldAutoFit
-      ? `data-fit-text="1" data-field="${escapeHtml(n.data || "texte")}" data-max-width="${n.fit?.maxWidth || n.w || 0}" data-max-height="${n.fit?.maxHeight || 0}" data-max-lines="${n.fit?.maxLines || 3}" data-min-size="${Math.max(n.fit?.minSize || minReadableSize, mobileMinSize)}"`
-      : "";
+    const fit = fitAttributes(n.data, specs, n.w || n.fit?.maxWidth, n.fit?.maxHeight);
     return `<div ${fit} style="${position} font-family:'${n.font}', sans-serif; font-weight:${n.weight}; font-size:${renderedSize}px; line-height:${n.lineHeight || 1.2}; font-style:${n.italic ? "italic" : "normal"}; color:${n.color}; text-align:${textAlign}; text-transform:${n.uppercase ? "uppercase" : "none"}; white-space:${whiteSpace}; word-wrap:break-word; ${w} ${rotate} ${shadow} ${underline} ${balance} ${flex}">${escapeHtml(text)}</div>`;
   }
 
@@ -98,14 +109,14 @@ function renderNode(n, data) {
     const normal = resolveText({ data: n.dataNormal }, data);
     const accent = resolveText({ data: n.dataAccent }, data);
     if (!normal && !accent) return "";
-    return `<div data-fit-text="1" data-field="titre" data-max-lines="3" data-min-size="34" style="font-family:'${n.font}', serif; font-weight:${n.weight}; font-size:${n.size}px; line-height:${n.lineHeight || 1.15}; color:${n.color}; width:100%; flex-shrink:0;">${escapeHtml(normal)} <span style="font-style:italic; font-weight:${n.accentWeight || n.weight}; color:${n.accentColor};">${escapeHtml(accent)}</span></div>`;
+    return `<div ${fitAttributes(`${n.dataNormal}+${n.dataAccent}`, specs, n.w)} style="font-family:'${n.font}', serif; font-weight:${n.weight}; font-size:${n.size}px; line-height:${n.lineHeight || 1.15}; color:${n.color}; width:100%; flex-shrink:0;">${escapeHtml(normal)} <span style="font-style:italic; font-weight:${n.accentWeight || n.weight}; color:${n.accentColor};">${escapeHtml(accent)}</span></div>`;
   }
 
   if (n.type === "quoteTwoTone") {
     const accent = resolveText({ data: n.dataAccent }, data);
     const main = resolveText({ data: n.dataMain }, data);
     if (!accent && !main) return "";
-    return `<div data-fit-text="1" data-field="citation" data-max-width="${n.w}" data-max-lines="3" data-min-size="34" style="font-family:'${n.font}', serif; font-size:${n.size}px; line-height:${n.lineHeight}; width:${n.w}px; color:${n.color}; text-align:center; flex-shrink:0;"><span style="font-weight:700; font-style:normal; color:${n.accentColor};">${escapeHtml(accent)}</span><span style="font-weight:500; font-style:italic;">${accent && main ? " " : ""}${escapeHtml(main)}</span></div>`;
+    return `<div ${fitAttributes(`${n.dataAccent}+${n.dataMain}`, specs, n.w)} style="font-family:'${n.font}', serif; font-size:${n.size}px; line-height:${n.lineHeight}; width:${n.w}px; color:${n.color}; text-align:center; flex-shrink:0;"><span style="font-weight:700; font-style:normal; color:${n.accentColor};">${escapeHtml(accent)}</span><span style="font-weight:500; font-style:italic;">${accent && main ? " " : ""}${escapeHtml(main)}</span></div>`;
   }
 
   if (n.type === "image") {
@@ -120,7 +131,7 @@ function renderNode(n, data) {
 
   if (n.type === "circleBadge") {
     const text = resolveText(n, data);
-    return `<div style="width:${n.size}px; height:${n.size}px; min-width:${n.size}px; border-radius:50%; background:${n.bg}; display:flex; align-items:center; justify-content:center; flex-shrink:0;"><div style="font-family:'${n.font}', sans-serif; font-weight:${n.weight}; font-size:${n.textSize}px; color:${n.textColor};">${escapeHtml(text)}</div></div>`;
+    return `<div style="width:${n.size}px; height:${n.size}px; min-width:${n.size}px; border-radius:50%; background:${n.bg}; display:flex; align-items:center; justify-content:center; flex-shrink:0;"><div ${fitAttributes(n.data, specs, n.size)} style="font-family:'${n.font}', sans-serif; font-weight:${n.weight}; font-size:${n.textSize}px; color:${n.textColor};">${escapeHtml(text)}</div></div>`;
   }
 
   if (n.type === "pill" || n.type === "outlinePill") {
@@ -129,7 +140,7 @@ function renderNode(n, data) {
     const w = n.w ? `width:${n.w}px;` : "";
     const h = n.h ? `height:${n.h}px;` : "";
     const shadow = n.shadow ? `box-shadow:${n.shadow};` : "";
-    const inner = (n.children || []).map(c => renderNode(c, data)).join("");
+    const inner = (n.children || []).map(c => renderNode(c, data, specs)).join("");
     const position = n.x !== undefined ? `position:absolute; left:${n.x}px; top:${n.y}px;` : "";
     return `<div style="${position} display:inline-flex; ${bg} ${w} ${h} ${shadow} border-radius:999px; padding:${n.padding || "10px 22px"}; ${rotate} align-items:center; justify-content:center; flex-shrink:0; align-self:${n.alignSelf || "flex-start"};">${inner}</div>`;
   }
@@ -137,7 +148,7 @@ function renderNode(n, data) {
   if (n.type === "bar") {
     const text = resolveText(n, data);
     if (n.hideIfEmpty && !text) return "";
-    return `<div style="display:flex; align-items:center; justify-content:space-between; width:100%; background:${n.bg}; border-radius:999px; padding:${n.padding || "20px 30px"}; box-sizing:border-box; flex-shrink:0;">${(n.children || []).map(c => renderNode(c, data)).join("")}</div>`;
+    return `<div style="display:flex; align-items:center; justify-content:space-between; width:100%; background:${n.bg}; border-radius:999px; padding:${n.padding || "20px 30px"}; box-sizing:border-box; flex-shrink:0;">${(n.children || []).map(c => renderNode(c, data, specs)).join("")}</div>`;
   }
 
   if (n.type === "row" || n.type === "group") {
@@ -149,7 +160,7 @@ function renderNode(n, data) {
     const padding = n.padding ? `padding:${n.padding};` : "";
     const marginTop = n.marginTop !== undefined ? `margin-top:${n.marginTop}px;` : "";
     const posStyle = n.x !== undefined ? `position:absolute; left:${n.x}px; top:${n.y}px;` : "";
-    const inner = (n.children || []).map(c => renderNode(c, data)).filter(Boolean).join("");
+    const inner = (n.children || []).map(c => renderNode(c, data, specs)).filter(Boolean).join("");
     if (!inner) return "";
     const extra = n.style || "";
     return `<div style="${posStyle} display:flex; flex-direction:${direction}; gap:${n.gap || 0}px; align-items:${align}; justify-content:${justify}; ${w} ${h} ${padding} ${marginTop} box-sizing:border-box; ${extra}">${inner}</div>`;
@@ -231,7 +242,7 @@ function buildHtml(templateName, data) {
   }
 
   if (cfg.root) {
-    boxesHtml += renderNode(cfg.root, data);
+    boxesHtml += renderNode(cfg.root, data, templateSpecs[templateName].fields);
   }
 
   return `<!doctype html>
@@ -261,13 +272,26 @@ function getBrowser() {
   return browserPromise;
 }
 
+async function closeBrowser() {
+  const current = browserPromise;
+  browserPromise = undefined;
+  if (current) await (await current).close();
+}
+
 const app = express();
 app.use(express.json({ limit: "10mb" }));
 app.use("/images", express.static(STORAGE_DIR, { maxAge: "365d", immutable: true }));
 
 app.get("/health", (req, res) => res.json({ ok: true, templates: Object.keys(layouts) }));
+app.get("/specs", (req, res) => {
+  if (AUTH_TOKEN && req.headers["x-render-token"] !== AUTH_TOKEN) {
+    return res.status(401).json({ error: "unauthorized" });
+  }
+  return res.json(require("./template-specs.json"));
+});
 
 app.post("/render/:template", async (req, res) => {
+  let page;
   try {
     if (AUTH_TOKEN) {
       const provided = req.headers["x-render-token"];
@@ -286,6 +310,20 @@ app.post("/render/:template", async (req, res) => {
         return res.status(400).json({ error: "invalid_static_field", field, length, maxChars: spec.maxChars });
       }
     }
+    const fields = templateSpecs[templateName].fields;
+    const missing = Object.entries(fields).filter(([field, spec]) =>
+      spec.required && !field.split("+").some(key => String(data[key] ?? "").trim())
+    ).map(([field]) => field);
+    if (missing.length) return res.status(400).json({ error: "missing_fields", fields: missing });
+    const lengths = Object.fromEntries(Object.keys(fields).map(field => [
+      field, field.split("+").reduce((sum, key) => sum + Array.from(String(data[key] ?? "")).length, 0)
+    ]));
+    const tooLong = Object.entries(fields).filter(([field, spec]) => lengths[field] > spec.maxChars)
+      .map(([field, spec]) => ({
+        field, reason: "width", lines: 0, maxLines: spec.maxLines, size: spec.size,
+        minSize: spec.minSize, length: lengths[field], maxChars: spec.maxChars
+      }));
+    if (tooLong.length) return res.status(422).json({ error: "overflow", template: templateName, fields: tooLong });
     const html = buildHtml(templateName, data);
 
     if (req.query.debug === "html") {
@@ -294,10 +332,25 @@ app.post("/render/:template", async (req, res) => {
     }
 
     const browser = await getBrowser();
-    const page = await browser.newPage({ viewport: { width: cfg.width, height: cfg.height } });
+    page = await browser.newPage({ viewport: { width: cfg.width, height: cfg.height } });
     await page.setContent(html, { waitUntil: "networkidle" });
-    await page.evaluate(async () => {
+    const result = await page.evaluate(async () => {
       await document.fonts.ready;
+      const fonts = new Set();
+      for (const element of document.querySelectorAll(".canvas *")) {
+        if (![...element.childNodes].some(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim())) continue;
+        if (!element.style.fontFamily && !element.parentElement.closest("[data-field]")) continue;
+        const style = getComputedStyle(element);
+        const family = style.fontFamily.split(",")[0].trim().replace(/^["']|["']$/g, "");
+        fonts.add(JSON.stringify([family, style.fontWeight, style.fontStyle]));
+      }
+      for (const font of fonts) {
+        const [family, weight, style] = JSON.parse(font);
+        const query = `${style} ${weight} 32px "${family}"`;
+        if (!(await document.fonts.load(query)).length || !document.fonts.check(query)) {
+          return { missingFont: `${family} ${weight}${style === "italic" ? " italic" : ""}` };
+        }
+      }
 
       // Les fonds générés par OpenAI arrivent sous forme de longues data URLs. Chromium peut
       // considérer la page comme inactive côté réseau alors que leur décodage et leur première
@@ -320,32 +373,73 @@ app.post("/render/:template", async (req, res) => {
         }
       }
 
-      for (const el of document.querySelectorAll("[data-fit-text]")) {
+      const issues = [];
+      const elements = [...document.querySelectorAll("[data-fit-text]")];
+      for (const el of elements) {
         const maxWidth = Number(el.dataset.maxWidth || 0);
         const maxHeight = Number(el.dataset.maxHeight || 0);
         const maxLines = Number(el.dataset.maxLines || 0);
         const minSize = Number(el.dataset.minSize || 12);
         let size = Number.parseFloat(getComputedStyle(el).fontSize);
-        const overflows = () => {
+        const measure = () => {
           const lineHeight = Number.parseFloat(getComputedStyle(el).lineHeight) || size * 1.2;
-          const lineCount = Math.ceil(el.scrollHeight / lineHeight);
-          return (maxWidth > 0 && el.scrollWidth > maxWidth + 1) ||
-            (maxHeight > 0 && el.scrollHeight > maxHeight + 1) ||
-            (maxLines > 0 && lineCount > maxLines);
+          const lines = Math.max(1, Math.ceil((el.scrollHeight - 1) / lineHeight));
+          const width = maxWidth || Math.min(el.clientWidth, el.parentElement.clientWidth);
+          const reason = width > 0 && el.scrollWidth > width + 1 ? "width" :
+            ((maxHeight > 0 && el.scrollHeight > maxHeight + 1) || lines > maxLines) ? "lines" : null;
+          return { field: el.dataset.field, reason, lines, maxLines, size, minSize };
         };
-        while (size > minSize && overflows()) {
-          size -= 1;
+        while (size > minSize && measure().reason) {
+          size = Math.max(minSize, size - 1);
           el.style.fontSize = `${size}px`;
         }
-        if (overflows()) {
-          throw new Error(`Le champ ${el.dataset.field || "texte"} dépasse encore ${maxLines || 3} lignes à la taille minimale lisible.`);
-        }
+        if (measure().reason) issues.push(measure());
       }
 
       await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const bounds = canvas.getBoundingClientRect();
+      const textBoxes = elements.map(el => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        return { el, rects: [...range.getClientRects()] };
+      });
+      const flag = (el, reason) => {
+        if (issues.some(issue => issue.field === el.dataset.field && issue.reason === reason)) return;
+        const style = getComputedStyle(el);
+        issues.push({
+          field: el.dataset.field, reason,
+          lines: Math.max(1, Math.ceil((el.scrollHeight - 1) / parseFloat(style.lineHeight))),
+          maxLines: Number(el.dataset.maxLines), size: parseFloat(style.fontSize),
+          minSize: Number(el.dataset.minSize)
+        });
+      };
+      for (const [index, box] of textBoxes.entries()) {
+        if (box.rects.some(r => r.left < bounds.left - 1 || r.top < bounds.top - 1 ||
+          r.right > bounds.right + 1 || r.bottom > bounds.bottom + 1)) flag(box.el, "canvas");
+        for (const other of textBoxes.slice(index + 1)) {
+          if (box.rects.some(a => other.rects.some(b => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 &&
+            Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1))) {
+            flag(box.el, "overlap");
+            flag(other.el, "overlap");
+          }
+        }
+      }
+      return { issues };
     });
+    if (result.missingFont) return res.status(500).json({ error: "font_missing", font: result.missingFont });
+    const { issues } = result;
+    if (issues.length) {
+      const staticIssue = issues.find(issue => fields[issue.field].static);
+      if (staticIssue) {
+        const field = staticIssue.field;
+        return res.status(400).json({ error: "invalid_static_field", field, length: lengths[field], maxChars: fields[field].maxChars });
+      }
+      return res.status(422).json({
+        error: "overflow", template: templateName,
+        fields: issues.map(issue => ({ ...issue, length: lengths[issue.field], maxChars: fields[issue.field].maxChars }))
+      });
+    }
     const buffer = await page.screenshot({ type: "png" });
-    await page.close();
 
     const id = crypto.randomUUID() + ".png";
     fs.writeFileSync(path.join(STORAGE_DIR, id), buffer);
@@ -360,11 +454,15 @@ app.post("/render/:template", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: String(err.message || err) });
+  } finally {
+    await page?.close().catch(() => {});
   }
 });
 
 if (require.main === module) {
+  purgeOldRenders();
+  setInterval(purgeOldRenders, dayMs).unref();
   app.listen(PORT, () => console.log("TERA EVENTS render service listening on port " + PORT));
 }
 
-module.exports = { app, buildHtml };
+module.exports = { app, buildHtml, closeBrowser };
