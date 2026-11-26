@@ -4,6 +4,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { chromium } = require("playwright");
 const { layouts } = require("./layouts");
+const { fontCss } = require("./font-css");
 
 const PORT = process.env.PORT || 3000;
 const AUTH_TOKEN = process.env.RENDER_AUTH_TOKEN || "";
@@ -237,7 +238,7 @@ function buildHtml(templateName, data) {
 <head>
 <meta charset="utf-8">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600;1,700&family=Caveat:wght@600;700&family=DM+Serif+Display&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;0,9..40,800&family=League+Spartan:wght@400;700&family=Geist:wght@500;600&family=Inter:wght@600;800&display=swap');
+  ${fontCss}
   * { margin:0; padding:0; box-sizing:border-box; }
   body { width:${cfg.width}px; height:${cfg.height}px; overflow:hidden; }
   .canvas { position:relative; width:${cfg.width}px; height:${cfg.height}px; ${canvasBackground} }
@@ -352,4 +353,8 @@ app.post("/render/:template", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log("TERA EVENTS render service listening on port " + PORT));
+if (require.main === module) {
+  app.listen(PORT, () => console.log("TERA EVENTS render service listening on port " + PORT));
+}
+
+module.exports = { buildHtml };
